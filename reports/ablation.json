@@ -1,0 +1,229 @@
+{
+  "params": {
+    "mtry": 6,
+    "min_n": 1,
+    "splitrule": "gini"
+  },
+  "seeds": [42, 43, 44, 45, 46],
+  "corr_filter_removes": [],
+  "summary": [
+    {
+      "experiment": "leaky_all_columns",
+      "n_features": 78,
+      "twin_overlap": 0.549886,
+      "macro_f1_mean": 0.993119,
+      "macro_f1_sd": 0.00163,
+      "kappa_mean": 0.991764,
+      "accuracy_mean": 0.995379
+    },
+    {
+      "experiment": "original",
+      "n_features": 23,
+      "twin_overlap": 0.580132,
+      "macro_f1_mean": 0.952143,
+      "macro_f1_sd": 0.006002,
+      "kappa_mean": 0.924692,
+      "accuracy_mean": 0.957783
+    },
+    {
+      "experiment": "group_split",
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1_mean": 0.88046,
+      "macro_f1_sd": 0.052374,
+      "kappa_mean": 0.828078,
+      "accuracy_mean": 0.903616
+    },
+    {
+      "experiment": "group_split_corr_filter",
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1_mean": 0.88046,
+      "macro_f1_sd": 0.052374,
+      "kappa_mean": 0.828078,
+      "accuracy_mean": 0.903616
+    }
+  ],
+  "results": [
+    {
+      "experiment": "leaky_all_columns",
+      "seed": 42,
+      "n_features": 78,
+      "twin_overlap": 0.559874,
+      "macro_f1": 0.99386,
+      "kappa": 0.994293,
+      "accuracy": 0.996849
+    },
+    {
+      "experiment": "leaky_all_columns",
+      "seed": 43,
+      "n_features": 78,
+      "twin_overlap": 0.547269,
+      "macro_f1": 0.995012,
+      "kappa": 0.992455,
+      "accuracy": 0.995798
+    },
+    {
+      "experiment": "leaky_all_columns",
+      "seed": 44,
+      "n_features": 78,
+      "twin_overlap": 0.541448,
+      "macro_f1": 0.992877,
+      "kappa": 0.990727,
+      "accuracy": 0.994753
+    },
+    {
+      "experiment": "leaky_all_columns",
+      "seed": 45,
+      "n_features": 78,
+      "twin_overlap": 0.557773,
+      "macro_f1": 0.993259,
+      "kappa": 0.99247,
+      "accuracy": 0.995798
+    },
+    {
+      "experiment": "leaky_all_columns",
+      "seed": 46,
+      "n_features": 78,
+      "twin_overlap": 0.543067,
+      "macro_f1": 0.990587,
+      "kappa": 0.988876,
+      "accuracy": 0.993697
+    },
+    {
+      "experiment": "original",
+      "seed": 42,
+      "n_features": 23,
+      "twin_overlap": 0.591387,
+      "macro_f1": 0.947212,
+      "kappa": 0.904904,
+      "accuracy": 0.947479
+    },
+    {
+      "experiment": "original",
+      "seed": 43,
+      "n_features": 23,
+      "twin_overlap": 0.580882,
+      "macro_f1": 0.956657,
+      "kappa": 0.939811,
+      "accuracy": 0.966387
+    },
+    {
+      "experiment": "original",
+      "seed": 44,
+      "n_features": 23,
+      "twin_overlap": 0.570829,
+      "macro_f1": 0.944234,
+      "kappa": 0.91691,
+      "accuracy": 0.952781
+    },
+    {
+      "experiment": "original",
+      "seed": 45,
+      "n_features": 23,
+      "twin_overlap": 0.590336,
+      "macro_f1": 0.957356,
+      "kappa": 0.933929,
+      "accuracy": 0.963235
+    },
+    {
+      "experiment": "original",
+      "seed": 46,
+      "n_features": 23,
+      "twin_overlap": 0.567227,
+      "macro_f1": 0.955258,
+      "kappa": 0.927905,
+      "accuracy": 0.959034
+    },
+    {
+      "experiment": "group_split",
+      "seed": 42,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.814765,
+      "kappa": 0.769304,
+      "accuracy": 0.871278
+    },
+    {
+      "experiment": "group_split",
+      "seed": 43,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.8734,
+      "kappa": 0.815365,
+      "accuracy": 0.897959
+    },
+    {
+      "experiment": "group_split",
+      "seed": 44,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.941066,
+      "kappa": 0.897332,
+      "accuracy": 0.943017
+    },
+    {
+      "experiment": "group_split",
+      "seed": 45,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.924346,
+      "kappa": 0.86834,
+      "accuracy": 0.92482
+    },
+    {
+      "experiment": "group_split",
+      "seed": 46,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.848721,
+      "kappa": 0.790048,
+      "accuracy": 0.881004
+    },
+    {
+      "experiment": "group_split_corr_filter",
+      "seed": 42,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.814765,
+      "kappa": 0.769304,
+      "accuracy": 0.871278
+    },
+    {
+      "experiment": "group_split_corr_filter",
+      "seed": 43,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.8734,
+      "kappa": 0.815365,
+      "accuracy": 0.897959
+    },
+    {
+      "experiment": "group_split_corr_filter",
+      "seed": 44,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.941066,
+      "kappa": 0.897332,
+      "accuracy": 0.943017
+    },
+    {
+      "experiment": "group_split_corr_filter",
+      "seed": 45,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.924346,
+      "kappa": 0.86834,
+      "accuracy": 0.92482
+    },
+    {
+      "experiment": "group_split_corr_filter",
+      "seed": 46,
+      "n_features": 23,
+      "twin_overlap": 0,
+      "macro_f1": 0.848721,
+      "kappa": 0.790048,
+      "accuracy": 0.881004
+    }
+  ]
+}

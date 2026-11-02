@@ -1,0 +1,43 @@
+# Hyper-parameters and paths. Every path and API setting can be overridden by an
+# APP_* environment variable (or the .env file); see .env.example.
+#
+# Profiles:
+#   default   leakage-aware pipeline: group split on identical specifications,
+#             group cross-validation, larger forest.
+#   original  the original method: random stratified split and CV.
+
+default:
+  seed: 42
+  log_level: INFO
+  paths:
+    raw_data: data/raw/ac_2025_09_14.csv
+    model: models/model.rds
+    reports_dir: reports
+  target:
+    breaks: [2.5, 4.0]
+  split:
+    strategy: group
+    test_prop: 0.2
+  cv:
+    folds: 3
+    repeats: 2
+  smote:
+    over_ratio: 1.5
+    neighbors: 5
+  model:
+    trees: 500
+    mtry: [2, 4, 6, 8]
+    min_n: [1, 3, 5]
+    splitrule: [gini, extratrees]
+  api:
+    host: 127.0.0.1
+    port: 8080
+    max_batch_size: 1000
+
+original:
+  split:
+    strategy: random
+  model:
+    trees: 100
+  paths:
+    model: models/model_original.rds

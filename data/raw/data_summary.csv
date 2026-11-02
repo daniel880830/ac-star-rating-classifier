@@ -1,0 +1,168 @@
+Column,Column Identifier,Description
+AnnualOutputCOP,copannual,This is heating energy efficiency (kW/kW) incorporating inoperative power consumption. This metric is what the MEPS level is based upon and has been in use since 2010. It has been replaced for registrations under the 2019 Determination by the field “Rated ACOP”.
+AnnualOutputEER,eerannual,This is cooling energy efficiency (kW/kW) incorporating inoperative power consumption. This metric is what the MEPS level is based upon and has been in use since 2010. It has been replaced for registrations under the 2019 Determination by the field “Rated AEER”.
+ApplStandard,Registration.regulatory_standard,This is the legal standard to which the appliance must comply
+Availability Status,Registration.availability_status,"This is the availability status of the product and must be either ""Available"" or ""Unavailable"". This status is based on self-reporting of the registrant and is not always accurate."
+avg_pwr_standby_mode,avg_pwr_standby_mode,"Not Applicable. Before the energy efficiency ratio incorporated inoperative power in 2009/2010, this was a voluntary declaration of standby power."
+Brand,Model.brand_name,This is the manufacturer's brand.
+c_star_cold,c__star_cold,"Cooling cycle energy efficiency star rating for the cold (Canberra, ACT) climate zone. Based on the “Residential TCSPF_cold”."
+c_star_hot,c__star_hot,"Cooling cycle energy efficiency star rating for the hot (Rockhampton, QLD) climate zone. Based on the “Residential TCSPF_hot”."
+c_star_mixed,c__star_mixed,"Cooling cycle energy efficiency star rating for the mixed (Richmond, NSW) climate zone. Based on the “Residential TCSPF_mixed”."
+C-Dehumid_Rated,c__dehumid_rated,"Rated dehumidifying power (kW) working at full load (flat out) at 35 degrees C. Combined with ""C-Sens_Cool_Rated"" = ""C-Total Cool Rated"". Not used under the 2019 Determination."
+C-Power_Inp_Rated,cooling_power_rated_effective,This is the electrical power used by the unit (kW) at 35 degrees C working at full load (flat out) and is used in registrations under the 2013 Determination. Replaced by “Rated cooling power input W” for registrations under in the 2019 Determination.
+C-Sens_Cool_Rated,total_cooling_capacity_sensible_capacity,"This is the cooling power (kW) that lowers a dry bulb thermometer temperature at 35 degrees C working at full load (flat out). Combined with ""C-Dehumid_Rated"" = ""C-Total Cool Rated"". Not used in registrations under the 2019 Determination."
+C-Total Cool Rated,c_total_cool_rated,"This is the total cooling output of the unit in kW at 35 degrees C working at full load (flat out) and appears as ""Capacity Output kW"" on the Energy Rating Label. This total is a combination of C-Sens_Cool_Rated and C-Dehumid_Rated."
+Commercial HSPF_cold,fhsp_comm_cold,"The ratio of total heat provided to total electrical power used (w/w) when used in a commercial situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Commercial HSPF_hot,fhsp_comm_hot,"The ratio of total heat provided to total electrical power used (w/w) when used in a commercial situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Commercial HSPF_mixed,fhsp_comm_mixed,"The ratio of total heat provided to total electrical power used (w/w) when used in a commercial situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Commercial tcec_cold,tcec_comm_cold,"The total electricity use (kWh) for the cooling season when used in a commercial situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Commercial tcec_hot,tcec_comm_hot,"The total electricity use (kWh) for the cooling season when used in a commercial situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Commercial tcec_mixed,tcec_comm_mixed,"The total electricity use (kWh) for the cooling season when used in a commercial situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Commercial TCSPF_cold,ftcsp_comm_cold,"The ratio of total cooling provided to total electrical power used (w/w) when used in a commercial situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Commercial TCSPF_hot,ftcsp_comm_hot,"The ratio of total cooling provided to total electrical power used (w/w) when used in a commercial situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Commercial TCSPF_mixed,ftcsp_comm_mixed,"The ratio of total cooling provided to total electrical power used (w/w) when used in a commercial situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Commercial thec_cold,thec_comm_cold,"The total electricity use (kWh) for the heating season when used in a commercial situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Commercial thec_hot,thec_comm_hot,"The total electricity use (kWh) for the heating season when used in a commercial situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Commercial thec_mixed,thec_comm_mixed,"The total electricity use (kWh) for the heating season when used in a commercial situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Configuration1,indoor_air_distribution,"This is the indoor air distribution and should be either ""non-ducted"", ""ducted"" or ""both""."
+Configuration2,configuration2,"This is the configuration of the air-conditioner unit and describes if it is a split system or a window/wall system etc. Also refer to ""Configuration2-unitmount""."
+Configuration2-unitmount,configuration2__unitmount,"This is the indoor unit type for split system air-conditioners Also refer to ""Configuration2""."
+Configuration3_Sink,configuration3_sink,"What is the exhaust heat transferred to e.g. Air, water, cooling tower."
+Configuration3_Source,configuration3_source,Where the heat or cool source comes from e.g. Air or water.
+COPtestAvg,coptestavg,This is the tested energy efficiency ratio for heating working at full load (flat out) (the higher the better).
+Country,Registration.registrationmanufacturingcountry_set,Country or countries of manufacture. Note that split systems can be produced in multiple countries.
+Demand Response 1,demandresponse_1,The model may have a demand response capability built into the product that is ready to use as supplied. Refer to AS/NZS 4755.3.1.
+Demand Response 2,demandresponse_2,The Energy Rating Label may indicate that the product is demand response capable. Not applicable for registrations under the 2019 Determination.
+Demand Response 4,demandresponse_4,The model may have a demand response capability only through the addition of a separate part.
+Demand Response 5,demandresponse_5,The model may comply with Mode 1 (on/off).
+Demand Response 6,demandresponse_6,The model may comply with Mode 2 (50% power).
+Demand Response 7,demandresponse_7,The model may comply with Mode 3 (75% power).
+Depth,appliance_dimensions_size,Insert overall dimension in mm. Not used in registrations under the 2019 Determination.
+EER,eer_display,"This is the cooling energy efficiency ratio (kW output / kW input) for the product. It is not used for registrations under the 2019 Determination. If you want to use a more consistent energy efficiency metric for cooling across the life of the E3 Program, use column EERTestAv."
+eermepslev,eermepslev,This data field has been superseded but may contain historical energy efficiency information.
+EERtestAvg,eertestavg,This is the tested energy efficiency ratio for cooling working at full load (flat out) (the higher the better).
+ExpDate,Registration.expiry_date,This is the date that the product's registration will expire. Not applicable to New Zealand registrations.
+Family Name,Registration.representative_family_number.model_number,Representative family model number or name.
+GrandDate,Registration.superseded_date,This product can be sold after this date but can no longer be manufactured or imported from this date
+h_star_cold,h__star_cold,"Heating cycle energy efficiency star rating for the cold (Canberra, ACT) climate zone. Based on the “Residential HSPF_cold”."
+h_star_hot,h__star_hot,"Heating cycle energy efficiency star rating for the hot (Rockhampton, QLD) climate zone. Based on the “Residential HSPF_hot”."
+h_star_mixed,h__star_mixed,"Heating cycle energy efficiency star rating for the mixed (Richmond, NSW) climate zone. Based on the “Residential HSPF_mixed”."
+H-Power_Inp_Rated,h__power_inp_rated,This is the electrical power used for heating by the unit (kW) at 7 degrees C working at full load (flat out). Replaced by “Rated heating power input watts” for registrations under the 2019 Determination.
+H-Total Heat Rated,h__total_heat_rated,"This is the total heating output of the unit in kW at 7 degrees C working at full load (flat out) and appears as ""Capacity Output kW"" on the Energy Rating Label."
+H1_half_cap_heat_cap_rated,h__h1_half_cap_heat_cap_rated,This is the rated heating capacity at 7 °C (H1) at half capacity operation in watts.
+H1_half_cap_power_rated,h__h1_half_cap_power_rated,This is the rated power input at 7 °C (H1) at half capacity operation in watts.
+H1_min_cap_heat_cap_rated,h__h1_min_cap_heat_cap_rated,This is the rated heating capacity at 7 °C (H1) at minimum capacity operation in watts.
+H1_min_cap_power_rated,h__h1_min_cap_power_rated,This is the rated power input at 7 °C (H1) at minimum capacity operation in watts.
+H2_COP,h2_cop,"This was a voluntary declaration under the 2013 Determination of heater efficiency (kW/kW) at 2 degrees C working at full load (flat out). It has been replaced by other H2 fields, below."
+H2_ext_cap_heat_cap_rated,h__h2_ext_cap_heat_cap_rated,This is the rated heating capacity at 2 °C (H2) at extended capacity operation in watts.
+H2_ext_cap_power_rated,h__h2_ext_cap_power_rated,This is the rated power input at 2 °C (H2) at extended capacity operation in watts.
+H2_full_cap_heat_cap_rated,h__h2_full_cap_heat_cap_rated,This is the rated heating capacity at 2 °C (H2) at full capacity operation in watts.
+H2_full_cap_power_rated,h__h2_full_cap_power_rated,This is the rated power input at 2 °C (H2) at full capacity operation in watts.
+H2_half_cap_heat_cap_rated,h__h2_half_cap_heat_cap_rated,This is the rated heating capacity at 2 °C (H2) at half capacity operation in watts.
+H2_half_cap_power_rated,h__h2_half_cap_power_rated,This is the rated power input at 2 °C (H2) at half capacity operation in watts.
+H2_HeatPwrCapacity,h2_heatpwrcapacity,This was a voluntary declaration under the 2013 Determination of heater capacity (kW) at 2 degrees C working at full load (flat out).
+H2_HeatPwrInput,h2_heatpwrinput,"This is a voluntary declaration under the 2013 Determination of electrical power (kW) used at 2 degrees C working at full load (flat out). It has been replaced by other H2 fields in the 2019 Determination, below."
+H2_min_cap_heat_cap_rated,h__h2_min_cap_heat_cap_rated,This is the rated heating capacity at 2 °C (H2) at minimum capacity operation in watts.
+H2_min_cap_power_rated,h__h2_min_cap_power_rated,This is the rated power input at 2 °C (H2) at minimum capacity operation in watts.
+H3_ext_cap_heat_cap_rated,h__h3_ext_cap_heat_cap_rated,This is the rated heating capacity at -7 °C (H3) at extended capacity operation in watts.
+H3_ext_cap_power_rated,h__h3_ext_cap_power_rated,This is the rated power input at -7 °C (H3) at extended capacity operation in watts.
+H3_ext_cap_power_rated,,
+H3_full_cap_heat_cap_rated,h__h3_full_cap_heat_cap_rated,This is the rated heating capacity at -7 °C (H3) at full capacity operation in watts.
+H3_full_cap_power_rated,h__h3_full_cap_power_rated,This is the rated power input at -7 °C (H3) at full capacity operation in watts.
+H3_half_cap_heat_cap_rated,h__h3_half_cap_heat_cap_rated,This is the rated heating capacity at -7 °C (H3) at half capacity operation in watts.
+H3_half_cap_power_rated,h__h3_half_cap_power_rated,This is the rated power input at -7 °C (H3) at half capacity operation in watts.
+Have H1 min cap results,h__h1_have_min_cap_results,Has this product supplied test results at minimum capacity for the 7 °C (H1) heating capacity test?
+Have H2 extended mode results,h__h2_is_capable_extended_load,Has this product supplied test results for extended capacity for the 2 °C (H2) heating capacity test?
+Have H2 full mode results,h__h2_have_full_cap_results,Has this product supplied test results for full capacity for the 2 °C (H2) heating capacity test?
+Have H2 half capacity results,h__h2_have_half_cap_results,Has this product supplied test results for half capacity for the 2 °C (H2) heating capacity test?
+Have H2 min capacity results,h__h2_have_min_cap_results,Has this product supplied test results for minimum capacity for the 2 °C (H2) heating capacity test?
+Have H3 extended mode results,h__h3_have_ext_cap_results,Has this product supplied test results for extended capacity for the -7 °C (H3) heating capacity test?
+Have H3 full mode results,h__h3_have_full_cap_results,Has this product supplied test results for full capacity for the -7 °C (H3) heating capacity test?
+Have H3 half capacity results,h__h3_have_half_cap_results,Has this product supplied test results for half capacity for the -7 °C (H3) heating capacity test?
+Have low temp cool full cap results,c__low_temp_have_full_cap_results,Has this product supplied test results at full capacity for the 29 °C cooling capacity test?
+Have low temp cool half cap results,c__low_temp_have_half_cap_results,Has this product supplied test results at half capacity for the 29 °C cooling capacity test?
+Have low temp cool min cap results,c__low_temp_have_min_cap_results,Has this product supplied test results at minimum capacity for the 29 °C cooling capacity test?
+Have T1 half cap results,c__t1_have_half_cap_results,Has this product supplied test results at half capacity for the T1 cooling capacity test?
+Have T1 min cap results,c__t1_have_min_cap_results,Has this product supplied test results at minimum capacity for the T1 cooling capacity test?
+Have_water_tank,does_air_conditioner_have_water_tank,Does this portable double duct unit or single duct unit have a supplementary water tank that lasts at least four hours for assisting cooling cycle performance?
+Height,appliance_dimensions_height,Insert overall dimension in mm. Not used under the 2019 Determination registrations.
+indoor_sound_level,indoor_sound_level,Indoor sound power (dB(A)) to EN 12102
+indoorType,indoortype,"This is the type of test facility that the air conditioner was tested in and is either ""calorimeter"", ""enthalpy"", “certification” or ""computer simulation""."
+Invert,does_this_air_conditioner_have_variable,"This model may use a variable speed drive or multispeed compressor. Not used for registrations under the 2019 Determination, see “Is variable output”, below."
+Is variable speed,variable_speed,Does the product have variable capacity output?
+Low temp cooling full cap power rated,c__low_temp_full_cap_power_rated,This is the rated power input at 29 °C at full capacity operation in watts.
+Low temp cooling full cap rated,c__low_temp_full_cap_cooling_cap_rated,This is the rated total cooling capacity at 29 °C at full capacity operation in watts.
+Low temp cooling half cap power rated,c__low_temp_half_cap_power_rated,This is the rated power input at 29 °C at half capacity operation in watts.
+Low temp cooling half cap rated,c__low_temp_half_cap_cooling_cap_rated,This is the rated total cooling capacity at 29 °C at half capacity operation in watts.
+Low temp cooling min cap power rated,c__low_temp_min_cap_power_rated,This is the rated power input at 29 °C at minimum capacity operation in watts.
+Low temp cooling min cap rated,c__low_temp_min_cap_cooling_cap_rated,This is the rated total cooling capacity at 29 °C at minimum capacity operation in watts.
+MEPSComp,mepscomp,This is a year that MEPS was applied to the appliance. If blank the data is unavailable.
+Model_No,Model.model_number,"This is the model number of the appliance, usually a unique field."
+N-Standard,Registration.test_standard,"This is the test standard used for the appliance, usually denoted with the prefix AS/NZS xxxxxxx."
+No HSPF,skip_heating_seasonal_pf,"For products greater than 30 kW rated capacity, is it confirmed that there is no Heating Seasonal Performance Factor information (HSPF)? HSPF is optional for these products."
+Outdoor unit only,outdoor_only,Is this unit offered for sale as the outdoor unit only of a split system?
+outdoor_sound_level,outdoor_sound_level,Outdoor sound power (dB(A)) to EN 12102
+outdoortype,test_room_outdoor_type_used,"This is the type of test facility that the air conditioner was tested in and is either ""calorimeter"", ""enthalpy"", “certification” or ""computer simulation"""
+PartNumber,prt_numb,If the product is demand response capable through the addition of an extra part (see field Demand Response 4) this is the part number.
+Phase,power_supply,This is the type of power supply (single or three phase) to run the air conditioner.
+PIA inoperative power,weighted_average_power_pia,Weighted average inactive power consumption (standby power) according to AS/NZS 3823.4
+PL_COPMEPS,pl_eermeps,Not Applicable
+PL_EERMEPS,pl_eermeps,Not Applicable
+Pnoc,pnoc,Non-operative power for cooling mode (lower the better). This was mandatory for registrations under the 2013 Determination and replaced “avg_pwr_standby_mode”. This has been replaced for registrations under the 2019 Determination by “PIA inoperative power”.
+Pnoh,pnoh,Non-operative power for heating mode (lower the better). This was mandatory for registrations under the 2013 Determination and replaced “avg_pwr_standby_mode”. This has been replaced for registrations under the 2019 Determination by “PIA inoperative power”.
+Product Class,Registration.product_class,Not Applicable.
+Product Website,Registration.get_manufacturer_company_website,This is the specific web address for the product itself.
+Rated ACOP,summary_rated_value_100_rated_cap_acop,This is heating energy efficiency (W/W) incorporating PIA inoperative power consumption. This metric is what the MEPS level is based upon.
+Rated AEER,summary_rated_value_100_rated_cap_aeer,This is cooling energy efficiency (W/W) incorporating PIA inoperative power consumption. This metric is what the MEPS level is based upon.
+Rated cool cap with water kW,c_total_cool_rated_kw_with_sup,"This is the rated total cooling capacity at 35 °C (T1) at full capacity operation in kilowatts, with the supplementary water tank operational (if applicable)."
+Rated cool cap with water W,c_total_cool_rated_with_sup,"This is the rated total cooling capacity at 35 °C (T1) at full capacity operation in watts, with the supplementary water tank operational (if applicable)."
+Rated cool power input with water,cooling_power_rated_effective_with_sup,"This is the rated power input at 35 °C (t1) at full capacity operation in watts, with the supplementary water tank operational (if applicable)."
+Rated cooling power input kW,cooling_power_rated_effective,This is the rated power input at 35 °C (T1) at full capacity operation in watts.
+Rated Heating Capacity watts,h__total_heat_rated_w,This is the rated heating capacity at 7 °C (H1) at full capacity operation in watts.
+Rated heating power input kW,h__power_inp_rated,This is the rated power input at 7 °C (H1) at full capacity operation in watts.
+Rated Total Cool Capacity W,c_total_cool_rated_w,This is the rated total cooling capacity at 35 °C (T1) at full capacity operation in watts.
+Refrigerant,refrigerant,This is the type of refrigerant gas used by the air-conditioner
+Registration Number,Registration.registration_number,The unique registration number assigned to this product.
+Representative Brand URL,Registration.representative_model_number.brand.url,This is the web address for the manufacturer
+Residential HSPF_cold,fhsp_cold,"The ratio of total heat provided to total electrical power used (w/w) when used in a residential situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Residential HSPF_hot,fhsp_hot,"The ratio of total heat provided to total electrical power used (w/w) when used in a residential situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Residential HSPF_mixed,fhsp_mixed,"The ratio of total heat provided to total electrical power used (w/w) when used in a residential situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Residential tcec_cold,tcec_cold,"The total electricity use (kWh) for the cooling season when used in a residential situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Residential tcec_cold with water,tcec_cold_with_sup,"The total electricity use (kWh) for the cooling season when used in a residential situation in the cold climate zone, which is based on the climate of Canberra, ACT. This is only for single duct products with a supplementary water tank."
+Residential tcec_hot,tcec_hot,"The total electricity use (kWh) for the cooling season when used in a residential situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Residential tcec_hot with water,tcec_hot_with_sup,"The total electricity use (kWh) for the cooling season when used in a residential situation in the hot climate zone, which is based on the climate of Rockhampton, QLD. This is only for single duct products with a supplementary water tank."
+Residential tcec_mixed,tcec_mixed,"The total electricity use (kWh) for the cooling season when used in a residential situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Residential tcec_mixed with water,tcec_mixed_with_sup,"The total electricity use (kWh) for the cooling season when used in a residential situation in the mixed climate zone, which is based on the climate of Richmond, NSW. This is only for single duct products with a supplementary water tank."
+Residential TCSPF_cold,ftcsp_cold,"The ratio of total cooling provided to total electrical power used (w/w) when used in a residential situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Residential TCSPF_hot,ftcsp_hot,"The ratio of total cooling provided to total electrical power used (w/w) when used in a residential situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Residential TCSPF_mixed,ftcsp_mixed,"The ratio of total cooling provided to total electrical power used (w/w) when used in a residential situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Residential thec_cold,thec_cold,"The total electricity use (kWh) for the heating season when used in a residential situation in the cold climate zone, which is based on the climate of Canberra, ACT."
+Residential thec_hot,thec_hot,"The total electricity use (kWh) for the heating season when used in a residential situation in the hot climate zone, which is based on the climate of Rockhampton, QLD."
+Residential thec_mixed,thec_mixed,"The total electricity use (kWh) for the heating season when used in a residential situation in the mixed climate zone, which is based on the climate of Richmond, NSW."
+Setting_cool,setting,Only applicable for testing houses
+Setting_heat,setting_heat,Only applicable for testing houses
+Sold_in,Registration.selling_countries,"These are the countries where the product is registered for sale and may include Australia, New Zealand and/or Fiji"
+sri2010_cool,sri2010_cool,This is the raw calculated Star Rating Index (SRI) value for cooling. Not used for registrations under the 2019 Determination.
+sri2010_heat,sri2010_heat,This is the raw calculated Star Rating Index (SRI) value for heating. Not used for registrations under the 2019 Determination.
+Star Image Large,Registration.url_star_image_large,This is the energy rating icon for the product and is based on the top half of the Energy Rating Label
+Star Image Small,Registration.url_star_image_small,This is a smaller version of the energy rating icon for the product and is based on the top half of the Energy Rating Label
+star2000_cool,star2000_cool,These were the cooling star ratings prior to 2010 and have been superseded.
+star2000_heat,star2000_heat,These were the heating star ratings prior to 2010 and have been superseded.
+Star2010_Cool,star2010_cool,"This is the value that determines the Energy Rating Label for cooling post 2010. Replaced for registrations under the 2019 Determination by the three “c_star_***”, below."
+Star2010_Heat,star2010_heat,"This is the value that determines the Energy Rating Label for heating post 2010. Replaced for registrations under the 2019 Determination by the three “h_star_***”, below."
+Submit_ID,Registration.pk,This is the unique registration ID record for the product and is taken from the GEMS product database
+SubmitStatus,Registration.get_status_display,"This is the registration status of the product and must be either ""Superseded"" or ""Approved"""
+T1_half_cap_cooling_cap_rated,c__t1_half_cap_cooling_cap_rated,This is the rated total cooling capacity at 35 °C (T1) at half capacity operation in watts.
+T1_half_cap_power_rated,c__t1_half_cap_power_rated,This is the rated power input at 35 °C (T1) at half capacity operation in watts.
+T1_min_cap_cooling_cap_rated,c__t1_min_cap_cooling_cap_rated,This is the rated total cooling capacity at 35 °C (T1) at minimum capacity operation in watts.
+T1_min_cap_power_rated,c__t1_min_cap_power_rated,This is the rated power input at 35 °C (T1) at minimum capacity operation in watts.
+TestedOutputCOP,testedoutputcop,Not Applicable
+TestedOutputEER,testedoutputeer,Not Applicable
+Type,air_conditioner_type,This indicates the products ability to cool or to cool and heat (Reverse Cycle).
+Type variable output,var_output_obtain,Type of variable capacity output.
+Var output compressor,var_output_compesssor,"If it is a variable speed compressor, what type? For instance, “Inverter” or “Digital scroll”?"
+Variable Output Compressor,variable_output_compressor_fitted,"This field indicated if the product had a variable output compressor, but it is no longer used. Replaced by new fields, below."
+Variable output rated as fixed sp,variable_output_rated_as_fixed,"Despite the physical presence of variable capacity output, has it been tested as a fixed speed compressor product?"
+VSCP_COP50,vscp_cop50,"This was a voluntary measure for variable speed units only and is the heating efficiency (kW/kW) at 50% capacity (part load) at 7 degrees C. It has been replaced for registrations under the 2019 Determination by a number of other tests, below."
+VSCP_EER50,vscp_eer50,"This was a voluntary measure for variable speed units only and is the cooling efficiency (kW/kW) at 50% capacity (part load) at 35 degrees C. It has been replaced for registrations under the 2019 Determination by a number of other tests, below."
+Width,appliance_dimensions_width,Insert overall dimension in mm. Not used for registrations under the 2019 Determination.

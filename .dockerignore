@@ -1,0 +1,17 @@
+.git
+.gitignore
+.Rproj.user
+.Rhistory
+.RData
+.env
+.vscode
+.idea
+renv/library
+renv/staging
+models/*
+reports/*.html
+notebooks
+tests/testthat/_snaps
+*.html
+group_presentation_modified.csv
+peer_review_template.Rmd

@@ -1,0 +1,56 @@
+Package: acstar
+Title: Air-Conditioner Energy Star-Rating Classifier
+Version: 0.1.0
+Authors@R:
+    person("daniel880830", email = "39270047+daniel880830@users.noreply.github.com", role = c("aut", "cre"))
+Description: Predicts the cooling energy-efficiency band (low / mid / high) of
+    air conditioners from the Australian Energy Rating open dataset. Provides a
+    reproducible cleaning pipeline, leakage-aware evaluation, a single
+    preprocessing-plus-model artifact, a command line interface and a REST API.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.3)
+Imports:
+    butcher,
+    config,
+    dials,
+    dplyr,
+    jsonlite,
+    logger,
+    parallel,
+    parsnip,
+    plumber,
+    purrr,
+    ranger,
+    readr,
+    recipes,
+    rlang,
+    rsample,
+    stats,
+    stringr,
+    themis,
+    tibble,
+    tidyr,
+    tune,
+    utils,
+    withr,
+    workflows,
+    yaml,
+    yardstick
+Suggests:
+    callr,
+    caret,
+    covr,
+    glmnet,
+    httr2,
+    kernlab,
+    kknn,
+    lintr,
+    MASS,
+    roxygen2,
+    styler,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.1

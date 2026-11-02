@@ -1,0 +1,93 @@
+{
+  "description": "Original caret pipeline reproduced from the raw CSV",
+  "rows": {
+    "total": 4759,
+    "train": 3809,
+    "test": 950
+  },
+  "best_tune": {
+    "mtry": 6,
+    "splitrule": "gini",
+    "min.node.size": 1
+  },
+  "cv": [
+    {
+      "model": "RF",
+      "cv_macro_f1_mean": 0.943124,
+      "cv_macro_f1_sd": 0.008813,
+      "cv_kappa_mean": 0.905368,
+      "cv_kappa_sd": 0.008095
+    },
+    {
+      "model": "SVMrbf",
+      "cv_macro_f1_mean": 0.90566,
+      "cv_macro_f1_sd": 0.017038,
+      "cv_kappa_mean": 0.853138,
+      "cv_kappa_sd": 0.025386
+    },
+    {
+      "model": "GLMnet",
+      "cv_macro_f1_mean": 0.789789,
+      "cv_macro_f1_sd": 0.006648,
+      "cv_kappa_mean": 0.645849,
+      "cv_kappa_sd": 0.011713
+    },
+    {
+      "model": "LDA",
+      "cv_macro_f1_mean": 0.723552,
+      "cv_macro_f1_sd": 0.00972,
+      "cv_kappa_mean": 0.544031,
+      "cv_kappa_sd": 0.026928
+    },
+    {
+      "model": "kNN",
+      "cv_macro_f1_mean": 0.8799,
+      "cv_macro_f1_sd": 0.007182,
+      "cv_kappa_mean": 0.811723,
+      "cv_kappa_sd": 0.0093
+    }
+  ],
+  "test": {
+    "macro_f1": 0.951985,
+    "kappa": 0.926566,
+    "accuracy": 0.958947,
+    "ci95": {
+      "macro_f1": [0.932103, 0.968511],
+      "kappa": [0.900327, 0.949174],
+      "accuracy": [0.944211, 0.971579]
+    }
+  },
+  "confusion": [
+    {
+      "low": 508,
+      "mid": 20,
+      "high": 0,
+      "_row": "low"
+    },
+    {
+      "low": 9,
+      "mid": 324,
+      "high": 3,
+      "_row": "mid"
+    },
+    {
+      "low": 0,
+      "mid": 7,
+      "high": 79,
+      "_row": "high"
+    }
+  ],
+  "original_reported": {
+    "macro_f1": 0.953,
+    "kappa": 0.928,
+    "accuracy": 0.96
+  },
+  "versions": {
+    "R": "R version 4.6.2 (2026-10-29 ucrt)",
+    "caret": "7.0.1",
+    "recipes": "1.4.0",
+    "themis": "1.1.0",
+    "ranger": "0.18.0"
+  },
+  "runtime_seconds": 1146.2
+}

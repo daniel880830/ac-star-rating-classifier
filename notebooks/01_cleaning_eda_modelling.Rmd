@@ -1,0 +1,1131 @@
+---
+title: "AC Energy Star Rating, Part 1: Cleaning, EDA and Modelling (original analysis)"
+output:
+  html_document:
+    toc: false
+    toc_float: false
+    number_sections: true
+    code_folding: hide
+    code_download: true
+params:
+  data_path: "../data/raw/ac_2025_09_14.csv"
+  sample_n: 5 
+  top_levels: 10
+---
+
+<style>
+body { font-size:11px; }
+#Head line 1
+h1 { font-size:23px; }
+#Head line 2
+h2 { font-size:17px; }
+#Head line 3
+h3 { font-size:7px; }
+#Normal words don't have to set size
+pre code { font-size:8px; }
+</style>
+
+<h3>Problem Define</h3>
+Can energy efficiency be determined by model-guided minimal testing on key performance predictors? In real life, there are many indicators for energy efficiency; however, it is difficult for people to identify which ones are truly important. By building this model, we can understand which features impact the score and by how much. This allows AC developers to predict the final environmental performance score without needing to conduct all the tests, requiring only a few simple ones instead.
+
+<h3>Data Source</h3>
+Data.gov.au is the Australian Government’s open-data portal, offering free access to authoritative datasets across government. It helps researchers, developers and businesses discover, reuse and build services from government data to drive transparency, innovation and better decision-making.<br>
+https://data.gov.au/data/dataset/energy-rating-for-household-appliances
+
+<h3>Data Overview</h3>
+Australia’s Energy Rating dataset tracks the air conditioners you can buy in Australia and New Zealand and how efficiently they run. For each model, it lists the brand and model number, the type of unit, whether it is inverter or variable output, and its registration status. It includes the key performance numbers such as cooling and heating capacity, power use, star rating, and seasonal efficiency across climate zones, plus practical details like refrigerant type and noise levels. In short, it is a clean, comparable snapshot of AC models so you can compare performance in a short time.
+
+- Rows: 5364 <br>
+- Columns: 167 <br>
+- Numerical Data: 159 <br>
+- Chategorical Data: 6 <br>
+
+<h3>Why this dataset is important</h3>
+This dataset (5,364 records and 167 fields) is mainly a technical product dataset. It contains model identifiers and product specification fields such as Model_No, Product Class, Configuration2-unitmount, outdoortype, outdoor_sound_level and related performance measures. It is therefore most useful for product-level analyses: classification of product types, compliance and efficiency assessments, comparing technical performance across models, and identifying product variants that may need maintenance or specification updates. The data has an Australian and New Zealand focus, so you can run locally relevant investigations such as regional compliance checks, market availability analysis, and performance comparisons across local climates and installation practices.
+
+<h3>Data Cleaning</h3>
+
+The dataset our group selected had a very large number of columns, many of which contained a significant amount of missing data. Additionally, there were issues such as inconsistent notations used across different columns and data that was unsuitable for being treated as a single category.
+
+To address this, we performed the data cleaning steps outlined below to create a clean dataset necessary for training the model to achieve our objective. During this process, our approach was to handle features carefully to prevent data leakage. If we were uncertain whether to remove a feature, we retained it, deciding that any columns that might hinder model construction could be re-evaluated and removed during the subsequent data preprocessing stage, after completing our Exploratory Data Analysis (EDA).
+
+<h3>Important Variables and Features</h3>
+These features are directly related to the energy efficiency of air-conditioners.
+<strong>Outcome varaible</strong>
+- c_star_mixed: Cooling cycle energy efficiency star rating for the mixed (Richmond, NSW) climate zone.<br>
+<strong>Predictor varaibles</strong>
+- Configuration2: This is the configuration of the air-conditioner unit and describes if it is a split system or a window/wall system etc.<br>
+- Refrigerant: This is the type of refrigerant gas used by the air-conditioner<br>
+
+<h3>Why the dataset is challenging</h3>
+<strong>1.Messy: Missing values</strong>
+Lots of columns have gaps and there're 21 duplicated rows. Missing value is likely non-random, thus, data imputation is needed, but naive imputation can lead bias results. We need thoughtful, per-column strategies and "is_missing" indicators for important features to prevent bias.<br>
+
+<strong>2.Complex: High dimensionality and mixed types</strong>
+With more than 100 features (167 total) this is high-dimensional. This condition increases the risk of overfitting, makes models slower to train, and complicates interpretation. Mixed data types (numeric, categorical) require separate preprocessing paths: numeric scaling or robust imputation, categorical encoding. Several near-constant (zero variance) columns will provide no signal and should be removed early.<br>
+
+<strong>3.Multi-class classification problem: </strong>
+Our dataset requires careful metrics and validation. Accuracy alone is insufficient; we will use Macro-F1, Cohen’s Kappa, and class-wise metrics, apply stratified cross-validation, and perform any resampling (e.g., SMOTE) within each fold only to prevent data leakage.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE
+)
+```
+<h3>Data Cleaning Process</h3>
+```{r}
+library(tidyverse)
+library(tibble)
+library(dplyr)
+
+# row dataset to be cleaned
+df <- read_csv("../data/raw/ac_2025_09_14.csv", show_col_types = FALSE)
+# data summary (description of each row compiled from a word file from data source)
+descriptions_df <- read.csv("../data/raw/data_summary.csv")
+
+```
+<strong>Step 1:</strong>
+First, while looking at the data, we discovered that instead of NA, strings such as "N/A" and "-" were used to represent missing values in various columns. To ensure these missing values could be properly identified, our first step was to replace these strings with NA.
+
+```{R}
+df_initial_clean <- df %>%
+  mutate(across(where(is.character), ~na_if(., "N/A"))) %>%
+  mutate(across(where(is.character), ~na_if(., "-")))
+```
+
+<strong>Step 2:</strong>
+Next, for further data cleaning, we investigated the data type and calculated the percentage of missing values and the count of unique values for each column. To provide context, we displayed this summary alongside with a description for each feature, which we had compiled into a data_summary.csv file from the original data source website.
+
+```{R}
+# create a data frame to store column name, count of missing values, and count of unique value
+initial_summary <- data.frame(
+  ColumnName = names(df_initial_clean),
+  DataType = sapply(df_initial_clean, class),
+  MissingCount = sapply(df_initial_clean, function(x) sum(is.na(x))),
+  UniqueCount = sapply(df_initial_clean, function(x) n_distinct(x))
+) %>%
+  # Update missing value count with missing value percentage
+  mutate(MissingPercentage = (MissingCount / nrow(df_initial_clean)) * 100) %>%
+  dplyr::select(-MissingCount) %>%
+  
+  # join with description
+  left_join(descriptions_df, by = c("ColumnName" = "Column")) %>%
+  
+  arrange(desc(MissingPercentage)) %>%
+  dplyr::select(ColumnName, Description, DataType, MissingPercentage, UniqueCount)
+
+#print(initial_summary)
+```
+
+<strong>Step 3:</strong>
+In this step, we performed feature selection by removing columns that were unnecessary for training our model. We look at each data description to determine which columns to delete. To prevent data leakage, we didn't remove columns that were unconfident if it's related to out research question. The criteria for removal were as follows:
+
+- Only Missing Values: We deleted column where 100% of the entry is NA value.
+- Column where description is "Not Applicable" (PL_COPMEPS)
+- Administrative data that is irrelevant to product features such as Family name of applicant, Registration Number, and SubmitStatus.
+- Image data that is irrelevant to product features.
+- Feature where the entry is either 0 or NA
+
+```{R}
+columns_to_delete <- c(
+  'avg_pwr_standby_mode',       # 100% NA value
+  'Setting_heat',               # 100% NA value
+  'eermepslev',                 # 100% NA value
+  'TestedOutputEER',            # 100% NA value
+  'TestedOutputCOP',            # 100% NA value
+  'PL_EERMEPS',                 # 100% NA value
+  'PL_COPMEPS',                 # 100% NA value
+  'GrandDate',                  # 100% NA value
+  'star2000_cool',              # 100% NA value
+  'star2000_heat',              # 100% NA value
+  'PL_COPMEPS',                 # Not applicable in description
+  'Family Name',                # Administrative information
+  'Representative Brand URL',   # Administrative information
+  'Product Website',            # Administrative information
+  'Model_No',                   # Administrative information
+  'Registration Number',        # Administrative information
+  'Submit_ID',                  # Administrative information
+  'SubmitStatus',               # Administrative information
+  'Star Image Large',           # Image data
+  'Star Image Small',           # Image data
+  'Rated cool power input with water',  # Only 0 or NA
+  'Rated cool cap with water W',        # Only 0 or NA   
+  'Rated cool cap with water kW',       # Only 0 or NA
+  'Residential tcec_cold with water',   # Only 0 or NA
+  'Residential tcec_mixed with water',  # Only 0 or NA
+  'Residential tcec_hot with water'     # Only 0 or NA
+  
+)
+
+df_processed_3 <- df_initial_clean %>%
+  dplyr::select(-all_of(columns_to_delete))
+
+```
+<strong>Step 4:</strong>
+Next, we remove any rows where our target variable, c__star_mixed, is NA. Since our objective is to predict a performance rating, treating these missing values as a separate category is not an appropriate approach.
+```{R}
+df_processed_4 <- filter(df_processed_3, !is.na(c_star_mixed)) 
+
+```
+
+<strong>Step 5:</strong>
+In this step, we standardized the data types as a prerequisite for cleaning data with inconsistent units and removing obvious outliers. After comparing the actual data with the types we confirmed above, we converted columns that were stored as character into their appropriate numeric or categorical (factor) formats.
+```{R}
+
+# To numeric
+columns_to_convert <- c(
+  "C-Dehumid_Rated", 
+  "C-Power_Inp_Rated",
+  "C-Sens_Cool_Rated",
+  "C-Total Cool Rated",
+  "Depth",
+  "H2_COP",
+  "H2_HeatPwrCapacity",
+  "H2_HeatPwrInput",
+  "Height",
+  "H-Power_Inp_Rated",
+  "H-Total Heat Rated",
+  "EERtestAvg",
+  "COPtestAvg",
+  "Setting_cool",
+  "Pnoc",
+  "Pnoh",
+  "VSCP_EER50",
+  "VSCP_COP50",
+  "AnnualOutputEER",
+  "AnnualOutputCOP",
+  "sri2010_cool",
+  "sri2010_heat",
+  "Width",
+  "EER",
+  "Rated Total Cool Capacity W",
+  "Rated cooling power input kW",
+  "T1_half_cap_power_rated",
+  "T1_half_cap_cooling_cap_rated",
+  "T1_min_cap_power_rated",
+  "T1_min_cap_cooling_cap_rated",
+  "Low temp cooling full cap power rated",
+  "Low temp cooling full cap rated",
+  "Low temp cooling half cap power rated",
+  "Low temp cooling half cap rated",
+  "Low temp cooling min cap power rated",
+  "Low temp cooling min cap rated",
+  "Rated Heating Capacity watts",
+  "Rated heating power input kW",
+  "H1_half_cap_power_rated",
+  "H1_half_cap_heat_cap_rated",
+  "H1_min_cap_power_rated",
+  "H1_min_cap_heat_cap_rated",
+  "H2_ext_cap_power_rated",
+  "H2_ext_cap_heat_cap_rated",
+  "H2_full_cap_power_rated",
+  "H2_full_cap_power_rated",
+  "H2_full_cap_heat_cap_rated",
+  "H2_half_cap_power_rated",
+  "H2_half_cap_heat_cap_rated",
+  "H2_min_cap_power_rated",
+  "H2_min_cap_heat_cap_rated",
+  "H3_ext_cap_power_rated",
+  "H3_ext_cap_heat_cap_rated",
+  "H3_full_cap_power_rated",
+  "H3_full_cap_heat_cap_rated",
+  "H3_half_cap_power_rated",
+  "H3_half_cap_heat_cap_rated",
+  "indoor_sound_level",
+  "outdoor_sound_level",
+  "Residential TCSPF_cold",
+  "Residential TCSPF_mixed",
+  "Residential TCSPF_hot",
+  "Commercial TCSPF_cold",
+  "Commercial TCSPF_mixed",
+  "Commercial TCSPF_hot",
+  "Residential tcec_cold",
+  "Residential tcec_mixed",
+  "Residential tcec_hot",
+  "Commercial tcec_cold",
+  "Commercial tcec_mixed",
+  "Commercial tcec_hot",
+  "Residential HSPF_cold",
+  "Residential HSPF_mixed",
+  "Residential HSPF_hot",
+  "Commercial HSPF_cold",
+  "Commercial HSPF_mixed",
+  "Commercial HSPF_hot",
+  "Residential thec_cold",
+  "Residential thec_mixed",
+  "Residential thec_hot",
+  "Commercial thec_cold",
+  "Commercial thec_mixed",
+  "Commercial thec_hot",
+  "PIA inoperative power",
+  "Rated AEER",
+  "Rated ACOP"
+  )
+
+# 3. Use mutate() and across() to apply the conversion
+df_processed_4_5 <- df_processed_4 %>%
+  mutate(across(all_of(columns_to_convert), as.numeric))
+
+columns_to_factor <- c(
+  "ApplStandard", 
+  "MEPSComp", 
+  "N-Standard",
+  "Brand",
+  "Configuration1",
+  "Configuration2",
+  "Configuration2-unitmount",
+  "Configuration3_Sink",
+  "Configuration3_Source",
+  "Country",
+  "indoorType",
+  "Invert",
+  "Star2010_Cool",
+  "Star2010_Heat",
+  "outdoortype",
+  "Phase",
+  "Refrigerant",
+  "Sold_in",
+  "Type",
+  "Product Class",
+  "Demand Response Capability",
+  "Demand Response 1",
+  "Demand Response 2",
+  "Demand Response 4",
+  "Demand Response 5",
+  "Demand Response 6",
+  "Demand Response 7",
+  "PartNumber",
+  "Availability Status",
+  "Variable Output Compressor",
+  "Have T1 half cap results",
+  "Have T1 min cap results",
+  "Have low temp cool full cap results",
+  "Have low temp cool half cap results",
+  "Have low temp cool min cap results",
+  "Have H1 min cap results",
+  "Have H2 extended mode results",
+  "Have H2 full mode results",
+  "Have H2 half capacity results",
+  "Have H2 min capacity results",
+  "Have H3 extended mode results",
+  "Have H3 full mode results",
+  "Have H3 half capacity results",
+  "c_star_cold",
+  "c_star_mixed",
+  "c_star_hot",
+  "h_star_cold",
+  "h_star_mixed",
+  "h_star_hot",
+  "Outdoor unit only",
+  "Have_water_tank",
+  "Is variable speed",
+  "Type variable output",
+  "Var output compressor",
+  "Variable output rated as fixed sp"
+  )
+
+df_processed_5 <- df_processed_4_5 %>%
+  mutate(across(all_of(columns_to_factor), factor))
+```
+<strong>Step 6:</strong>
+According to the description, the unit for C-Dehumid_Rated is kW; however, some entries are over 1000. We concluded these entries were recorded on a different scale, so we divided these values by 1000 to standardize the unit.
+
+```{R}
+
+df_processed_6 <- df_processed_5 %>%
+  mutate(`C-Dehumid_Rated` = if_else(
+    `C-Dehumid_Rated` > 1000,       
+    `C-Dehumid_Rated` / 1000,       
+    `C-Dehumid_Rated`                     
+  ))
+
+```
+<strong>Step 7:</strong>
+In the Country column, we found multi-label, comma-separated values, such as "Australia, China".
+To handle this, we first analyzed the frequency of each country and observed a highly skewed distribution. A small number of countries appeared very frequently, while most appeared rarely. We identified a clear drop-off in frequency after the seventh most common country, New Zealand.
+To prevent our model from learning unreliable patterns from these infrequent categories and to reduce the overall dimensionality of the data, we decided to create features for only the top seven countries. All remaining countries were consolidated into a single 'Other' category. Each of these new features indicates a country's presence with a value of 'Yes' and its absence with 'No'.
+
+```{r}
+# Calculate the frequency of each country, handling both separators
+country_frequency <- df_processed_6 %>%
+  separate_rows(Country, sep = ",") %>%
+  mutate(Country = trimws(Country)) %>%
+  filter(Country != "") %>%
+  count(Country, name = "Frequency") %>%
+  arrange(desc(Frequency))
+# print(country_frequency)
+```
+```{R}
+country_frequency <- df_processed_6 %>%
+  separate_rows(Country, sep = ",") %>%
+  mutate(Country = trimws(Country)) %>%
+  filter(Country != "") %>%
+  count(Country, sort = TRUE, name = "Frequency")
+
+top_7_countries <- country_frequency %>%
+  top_n(7, wt = Frequency) %>%
+  pull(Country)
+
+df_with_country_features <- df_processed_6 %>%
+  mutate(row_id = row_number()) %>%
+  # Split the comma-separated countries into separate rows
+  separate_rows(Country, sep = ",") %>%
+  mutate(Country = trimws(Country)) %>%
+  filter(Country != "") %>%
+  # Re-label any country not in the top 7 as "Other"
+  mutate(Country_Cleaned = if_else(Country %in% top_7_countries, Country, "Other")) %>%
+  # Add a column with the value "Yes" that we will use to create the new columns
+  mutate(Value = "Yes") %>%
+  # Ensure each original row has only one entry per cleaned country
+  distinct(row_id, Country_Cleaned, .keep_all = TRUE) %>%
+  # Pivot the data to create the new "Yes"/"No" columns
+  pivot_wider(
+    id_cols = row_id,
+    names_from = Country_Cleaned,
+    names_prefix = "Country_", # Optional: adds a prefix to new column names
+    values_from = Value,
+    values_fill = "No" # For any country not present, fill with "No"
+  )
+
+# Join the newly created features back to the original dataframe, removing the old 'Country' column
+df_processed_7 <- df_processed_6 %>%
+  dplyr::select(-Country) %>%
+  mutate(row_id = row_number()) %>%
+  left_join(df_with_country_features, by = "row_id") %>%
+  dplyr::select(-row_id) # Remove the temporary row ID
+
+```
+<strong>Step 8:</strong>
+Similar to Step 6.2, the Sold_in column also contained comma-separated entries, such as "Australia,Fiji,New Zealand".
+
+After discovering that only three unique countries appear in this column, we created a new column for each country, indicating with 'Yes' or 'No' whether the product is sold in that location
+```{r}
+# Calculate the frequency of each country, handling both separators
+Sold_in_frequency <- df_processed_7 %>%
+  separate_rows(Sold_in, sep = ",") %>%
+  mutate(Sold_in = trimws(Sold_in)) %>%
+  filter(Sold_in != "") %>%
+  count(Sold_in, name = "Frequency") %>%
+  arrange(desc(Frequency))
+print(Sold_in_frequency)
+```
+```{R}
+df_with_sold_in_features <- df_processed_7 %>%
+  mutate(row_id = row_number()) %>%
+  # Split the comma-separated locations in the "Sold_in" column
+  separate_rows(Sold_in, sep = ",") %>%
+  mutate(Sold_in = trimws(Sold_in)) %>%
+  filter(Sold_in != "") %>%
+  # Add a column with the value "Yes" to use for creating the new columns
+  mutate(Value = "Yes") %>%
+
+  distinct(row_id, Sold_in, .keep_all = TRUE) %>%
+
+  pivot_wider(
+    id_cols = row_id,
+    names_from = Sold_in, # Use the "Sold_in" column for new column names
+    names_prefix = "Sold_in_", 
+    values_from = Value,
+    values_fill = "No" # Fill missing combinations with "No"
+  )
+
+df_processed_8 <- df_processed_7 %>%
+  dplyr::select(-Sold_in) %>% # Remove the original "Sold_in" column
+  mutate(row_id = row_number()) %>%
+  left_join(df_with_sold_in_features, by = "row_id") %>%
+  dplyr::select(-row_id) 
+
+```
+
+<strong>Step 9:</strong>
+Our investigation revealed that the following pairs of columns contained completely identical entries: 
+- C-Power_Inp_Rated and Rated cooling power input kW
+- H-Power_Inp_Rated and Rated heating power input kW
+- Demand Response 6 and Demand Response 7.
+
+Although Demand Response 6 and Demand Response 7 were identical, we excluded them from this step because they have different descriptions in the data dictionary. For the other two pairs, we consolidated the identical columns into C-Power_Inp_Rated and H-Power_Inp_Rated, respectively, to eliminate redundancy.
+
+Furthermore, within the newly consolidated columns, we identified a significant outlier with a value of 22952 for C-Power_Inp_Rated and 19242 for H-Power_Inp_Rated. As this was extremely large compared to the other values, we removed the entire row containing this entry.
+
+```{R}
+# setting graph size
+knitr::opts_chunk$set(fig.width = 3, fig.height = 2)
+
+# Get all unique combinations of 2 column names
+column_pairs <- combn(names(df_processed_8), 2, simplify = FALSE)
+# Create a function to check if two columns are identical (handling NAs)
+are_columns_identical <- function(df, col1_name, col2_name) {
+  # Extract the columns
+  col1 <- df[[col1_name]]
+  col2 <- df[[col2_name]]
+  # Check for equality. This is TRUE if values are the same,
+    clean_col1 <- as.character(col1)
+  clean_col2 <- as.character(col2)
+  # perform the comparison on the character vectors
+  all((clean_col1 == clean_col2) | (is.na(clean_col1) & is.na(clean_col2)))
+}
+# Apply this function to every pair of columns
+is_pair_identical <- sapply(column_pairs, function(pair) {
+  are_columns_identical(df_processed_8, pair[1], pair[2])
+})
+# Filter to get only the pairs that are identical
+identical_pairs_list <- column_pairs[is_pair_identical]
+
+# Format the result into a clean data frame and print it
+if (length(identical_pairs_list) > 0) {
+  identical_pairs_df <- do.call(rbind, lapply(identical_pairs_list, function(p) {
+    data.frame(Column1 = p[1], Column2 = p[2], stringsAsFactors = FALSE)
+  }))
+  
+  print("Found the following identical column pairs:")
+  print(identical_pairs_df)
+} else {
+  print("No identical column pairs were found.")
+}
+```
+
+
+```{R}
+df_processed_9 <- df_processed_8 %>%
+  # Consolidate the identical pairs by removing the redundant columns
+  dplyr::select(
+    -`Rated cooling power input kW`,
+    -`Rated heating power input kW`
+  ) %>%
+  
+  # Remove the significant outliers, while explicitly keeping NA rows
+  filter(`C-Power_Inp_Rated` != 22952 | is.na(`C-Power_Inp_Rated`)) %>%
+  filter(`H-Power_Inp_Rated` != 19242 | is.na(`H-Power_Inp_Rated`))
+
+
+
+```
+
+<strong>Step 10:</strong>
+We observed that for units where the Type is "Cooling Only", many heat-related values were recorded as 0. Since heating performance is not applicable for these products, these entries should be NA rather than 0.
+To correct this, we replaced the 0 values with NA in the following heat-related columns for all rows where "Type" is "Cooling Only"
+- H-Power_Inp_Rated
+- H-Total Heat Rated
+- COPtestAvg
+- Rated Heating Capacity watts
+- Residential thec_cold
+- Residential thec_mixed
+- Residential thec_hot
+- h_star_cold
+- h_star_mixed
+- h_star_hot
+- Rated ACOP
+```{R}
+heat_related_columns <- c(
+  "H-Power_Inp_Rated",
+  "H-Total Heat Rated",
+  "COPtestAvg",
+  "Rated Heating Capacity watts", # Use the name with dots if R converted it
+  "Residential thec_cold",
+  "Residential thec_mixed",
+  "Residential thec_hot",
+  "h_star_cold",
+  "h_star_mixed",
+  "h_star_hot",
+  "Rated ACOP"
+)
+
+# 2. Apply the conditional replacement
+df_processed_10 <- df_processed_9 %>%
+  mutate(across(all_of(heat_related_columns), 
+                ~as.numeric(as.character(.)))) %>%
+  mutate(across(all_of(heat_related_columns), 
+                ~if_else(Type == "Cooling Only" & . == 0, NA_real_, .)))
+
+```
+
+<strong>Step 11:</strong>
+In the Phase column, the values "Three" and "Three-Phase" were present as separate entries. Since these are considered to represent the same category, we consolidated them into a single value, "Three".
+```{R}
+df_processed_11 <- df_processed_10 %>%
+  mutate(Phase = replace(Phase, Phase == "Three-Phase", "Three"))
+```
+
+<strong>Step 12:</strong>
+We discovered that the following columns contained negative values. According to their descriptions, these columns represent a "ratio of total cooling provided to total electrical power used (w/w)" or "total electricity use," which cannot logically be negative.
+
+Therefore, we concluded that these negative entries are invalid and replaced them with NA. This was applied to the following columns:
+- Residential TCSPF_cold
+- Residential TCSPF_mixed
+- Residential TCSPF_hot
+- Commercial TCSPF_cold
+- Commercial TCSPF_mixed
+- Commercial TCSPF_hot
+- Residential tcec_cold
+- Residential tcec_mixed
+- Residential tcec_hot
+- Commercial tcec_cold
+- Commercial tcec_mixed
+- Commercial tcec_hot
+
+```{R}
+columns_to_clean <- c(
+  "Residential TCSPF_cold",
+  "Residential TCSPF_mixed",
+  "Residential TCSPF_hot",
+  "Commercial TCSPF_cold",
+  "Commercial TCSPF_mixed",
+  "Commercial TCSPF_hot",
+  "Residential tcec_cold",
+  "Residential tcec_mixed",
+  "Residential tcec_hot",
+  "Commercial tcec_cold",
+  "Commercial tcec_mixed",
+  "Commercial tcec_hot"
+)
+
+df_processed_12 <- df_processed_11 %>%
+  mutate(across(all_of(columns_to_clean), 
+                ~if_else(. < 0, NA_real_, .)))
+
+```
+
+<strong>Step 13:</strong>
+Of course. Here is the revised English text to reflect that you converted all character columns to uppercase.
+To address inconsistent capitalization found in multiple character columns (for example, "TOSHI-BA" and "Toshiba" in the Brand column), we standardized all character-type columns by converting their entries to uppercase. This ensures uniform categorization across the entire dataset.
+
+
+```{R}
+
+df_processed_13 <- df_processed_12 %>%
+    mutate(across(where(~is.character(.) | is.factor(.)), toupper))
+
+```
+<strong>Step 14:</strong>
+Save the cleaned dataset
+```{R}
+write_csv(df_processed_13, "cleaned_ac_data.csv")
+
+
+```
+<strong>Step 15:</strong>
+Final check of the dataset
+```{R}
+dim(df_processed_13)
+
+summary <- data.frame(
+  ColumnName = names(df_processed_13),
+  DataType = sapply(df_processed_13, class),
+  MissingCount = sapply(df_processed_13, function(x) sum(is.na(x))),
+  UniqueCount = sapply(df_processed_13, function(x) n_distinct(x))
+) %>%
+  # Calculate the percentage of missing values
+  mutate(MissingPercentage = (MissingCount / nrow(df_processed_13)) * 100) %>%
+  # Remove the original raw count column
+  dplyr::select(-MissingCount) %>%
+  # Arrange the rows in descending order of the missing percentage
+  arrange(desc(MissingPercentage))
+
+# Print the final, sorted summary
+View(summary)
+
+```
+<h3>Conclusion</h3>
+After the data cleaning process, we explore whether each column should be removed or kept, in order to provide a deeper understanding of the relationship between each variable and the target we are trying to predict.
+
+<strong>Step 1: Initialisation</strong>
+The preparation for starting the EDA & Visualization process.
+```{r}
+library(tidyr)
+library(ggplot2)
+library(here)
+library(ggfortify)
+library(broom)
+library(gridExtra)
+library(Rtsne)
+library(ggpubr)
+library(rsample)
+library(ggthemes)
+library(purrr)
+
+theme_set(ggthemes::theme_clean())
+set.seed(42)
+
+# Read the data, and mark all types of NA as missing
+df <- readr::read_csv(
+  "cleaned_ac_data.csv",
+  na = c("", "NA", "N/A", "n/a", "-", "--", "null", "Null", "NULL"),
+  show_col_types = FALSE
+)
+
+# Identify our target variables
+target_var <- "c_star_mixed"
+stopifnot(target_var %in% names(df))
+df[[target_var]] <- as.factor(df[[target_var]])
+
+# Seperate the columns into numeric and categoric types.
+num_cols <- df %>% dplyr::select(where(is.numeric)) %>% names()
+cat_cols <- setdiff(df %>% dplyr::select(where(~is.character(.) || is.factor(.))) %>% names(), target_var)
+
+# Return to the nmax line before the cand
+slice_top <- function(cand, nmax) {
+  k <- min(nrow(cand), nmax)
+  dplyr::slice(cand, 1:k)
+}
+
+```
+<strong>Step 2: Target Recognition</strong>
+Our research question is a classification problem. It is essential to identify the distribution of each category, which determines the assessment metrics we will use and whether class weights should be implemented.
+```{r}
+table(df[[target_var]])
+round(prop.table(table(df[[target_var]]))*100, 1)
+
+# Plot the bar chart
+ggplot(df, aes(x = .data[[target_var]])) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Distribution of Star-Rating Classes", x = "Star class", y = "Count")
+```
+X-axis shows the star class, y-axis shows the accumulation number for this class. It is obvious that both the lower and higher star classes are imbalanced, meaning that we need to adjust the weights to ensure that minority classes will not be overlooked.
+
+According to the official energy rating scheme, portable air conditioners follow a special labeling rule (https://www.energyrating.gov.au/industry-information/understand-requirements/labelling/understand-zoned-energy-rating-label). It is necessary to do a particular research of the 'Portable AC'.
+```{r}
+portable_dist <- df %>%
+  filter(Configuration2 == "PORTABLE") %>%
+  count(c_star_mixed) %>%
+  mutate(prop = round(100 * n / sum(n), 1))
+
+portable_dist
+```
+We find that all portable units are 0-star. For prevent the model from learning rule-based shortcuts, this type of AC is not in our consideration.
+
+<strong>Step 3: Summary about Missing Value</strong>
+This part aims to identify the missing values of each variable. For variables with a missing ratio ≥ 90%, we can remove them directly because the remaining samples are too small to conduct further analysis accurately.
+```{r}
+# Summary about the data after the column separation
+summary_dim <- tibble(
+  n_rows = nrow(df),
+  n_cols = ncol(df),
+  n_numeric = length(num_cols),
+  n_categorical = length(cat_cols) + 1L
+)
+summary_dim
+
+# Pre-column missing value table
+missing_table <- map_dfr(names(df), function(nm) {
+  tibble(
+    feature = nm,
+    dtype   = class(df[[nm]])[1],
+    n_unique = dplyr::n_distinct(df[[nm]], na.rm = TRUE),
+    missing_count = sum(is.na(df[[nm]])),
+    missing_pct   = round(100*mean(is.na(df[[nm]])), 2)
+  )
+}) %>% arrange(desc(missing_pct), desc(missing_count))
+
+# Exhibiting the top 5 Feature as an example
+head(missing_table, 5)
+
+```
+First table shows that there are 5,306 number of rows, 149 of columns, 90 numeric variables and 57 categorical variables, which is including the target (c_star_mixed).
+Second table shows the top 5 tables which have the largest proportion of missing variables, from 100% to 37.98% of missing values. For the column that the ratio of missing values larger than 90%, we trying to remove it.
+
+<strong>Step 4: Correlation testing - Chi-square</strong>
+In this step, we use chi-square tests to examine the correlation between the remaining columns and the target we are trying to predict. This provides more information to evaluate whether each column should be kept or removed.
+```{r}
+cand_cat <- missing_table %>%
+  filter(feature %in% cat_cols, n_unique <= 10) %>%
+  arrange(missing_pct, missing_count)
+
+# Show top 5 as an example
+top_cat <- cand_cat %>%
+  slice_top(5) %>%
+  pull(feature)
+
+chi_results <- purrr::map_dfr(top_cat, function(v) {
+  tab <- table(df[[v]], df[[target_var]])
+  if (min(dim(tab)) > 1) {
+    cs <- suppressWarnings(chisq.test(tab))
+    n <- sum(tab); k <- min(nrow(tab), ncol(tab))
+    cramer_v <- sqrt(cs$statistic / (n * (k - 1)))
+    tibble(feature = v,
+           p_value = signif(cs$p.value, 3),
+           cramer_v = round(as.numeric(cramer_v), 3))
+  }
+}) %>% arrange(p_value)
+chi_results
+
+```
+The table just shows the 5 features. Cramer_v shows the correlationship between feature and the tagret variables. If the cramer_v close to 0.1, means the correlation is weak; around 0.3 means middle correlation and around 0.5 means strong correlation.
+
+<strong>Step 5: Redundancy</strong>
+Before the modeling stage, it is necessary to identify redundant features, such as those with ≥ 90% missing values, very low information (≤ 2 unique values), or extreme imbalance (≥ 80% in one level), as these may lead to overfitting and noisy data.
+```{r}
+# Mark the inappropriate features
+flags <- missing_table %>%
+  mutate(
+    flag_missing90 = missing_pct >= 90,
+    flag_low_card  = dtype %in% c("character","factor") & n_unique <= 2,
+    flag_rare_levels = if_else(dtype %in% c("character","factor"),
+      map_lgl(feature, ~ {
+        x <- df[[.x]]; x <- x[!is.na(x)]; if (length(x) == 0) return(FALSE)
+        max(prop.table(table(x))) >= 0.8
+      }), FALSE)
+  ) %>% arrange(desc(flag_missing90), desc(flag_low_card), desc(flag_rare_levels), desc(missing_pct))
+
+flags %>% filter(flag_missing90 | flag_low_card | flag_rare_levels) %>% head(5)
+
+```
+The flag_missing90 is True, means that there are almost no available ovservations; flag_low_card is Ture referred that the categories of this feature is less ore equal to 2, whcih is still not enough to classified 15 class of star rating; flag_rare_levels is True means that this feature has at the least 80% in some level, which is nearly indistinguishable.
+
+<h3>EDA & Visulisation</h3>
+Make the conclusion of the whole EDA & Visulisation process, print the table for the final result.
+```{r}
+# Significant testing：numeric -> Kruskal; classification -> Chi-square
+feature_significance <- function(df, var, target_var) {
+  x <- df[[var]]; y <- df[[target_var]]
+  if (is.numeric(x)) {
+    if (length(unique(na.omit(x))) < 2) return(NA_real_)
+    out <- tryCatch(kruskal.test(x ~ y), error = function(e) NULL)
+    return(if (is.null(out)) NA_real_ else out$p.value)
+  } else {
+    tab <- table(x, y, useNA = "no")
+    if (min(dim(tab)) < 2) return(NA_real_)
+    cs <- suppressWarnings(chisq.test(tab))
+    return(cs$p.value)
+  }
+}
+
+# Remove the Portable in the Configuration2
+portable_rule <- list(
+  feature = "Configuration2",
+  level   = "Portable",
+  reason  = "Portable units are rule-assigned (often 0-star) per Energy Rating guideline; remove these rows to avoid rule-based label bias."
+)
+
+decision_table <- missing_table %>%
+  mutate(
+    flag_missing90   = missing_pct >= 90,
+    flag_low_card    = dtype %in% c("character","factor") & n_unique <= 2,
+    flag_rare_levels = if_else(dtype %in% c("character","factor"),
+      purrr::map_lgl(feature, ~ {
+        z <- df[[.x]]; z <- z[!is.na(z)]
+        if (length(z) == 0) return(FALSE)
+        max(prop.table(table(z))) >= 0.8
+      }), FALSE),
+    p_value = purrr::map_dbl(feature, ~ feature_significance(df, ., target_var)),
+    sig     = !is.na(p_value) & p_value < 0.05
+  ) %>%
+  mutate(
+    
+    level_drop        = dplyr::if_else(feature == portable_rule$feature, portable_rule$level, NA_character_),
+    level_drop_reason = dplyr::if_else(feature == portable_rule$feature, portable_rule$reason, NA_character_),
+
+    decision = dplyr::case_when(
+      feature == target_var             ~ "Keep (target variable)",
+      flag_missing90                    ~ "Drop (≥90% missing)",
+      flag_low_card                     ~ "Drop (low information)",
+      flag_rare_levels                  ~ "Drop (extreme imbalance)",
+      TRUE                              ~ ifelse(sig, "Keep (predictive signal)", "Review (unclear)")
+    ),
+    reason = dplyr::case_when(
+      feature == target_var ~ "Target variable for prediction",
+      flag_missing90        ~ "Too many missing values (≥90%)",
+      flag_low_card         ~ "Only 1–2 unique values; not informative",
+      flag_rare_levels      ~ "One level dominates ≥80%; low discriminability",
+      sig                   ~ "Shows significant relationship with star rating (p<0.05)",
+      TRUE                  ~ "Moderate missingness or weak signal; needs domain judgment"
+    )
+  ) %>%
+  dplyr::select(feature, dtype, n_unique, missing_pct,
+         flag_missing90, flag_low_card, flag_rare_levels,
+         p_value, decision, reason, level_drop, level_drop_reason)
+
+# Save the data
+readr::write_csv(decision_table, "EDA_feature_decisions.csv")
+
+# Review the data
+EDA_feature_decisions <- read_csv("EDA_feature_decisions.csv")
+View(EDA_feature_decisions)
+```
+<strong>Data Imputation: </strong>
+The table shows the level of missing values, balancing, significance, and the advice for each feature. The rows of data were reduced from 5,306 to 4,759, and the columns from 149 to 80. A sample of the results is shown here; please check the full table for details.
+
+In describing the extent and pattern of missing values in the dataset, we did not formally assess the missing mechanism (such as, MCAR, MAR, MNAR) due to constraints in Pages. Instead, given the provenance of the dataset from data.gov.au, we assume that the data collection process is reasonable (Data is from Bureau of Statistics). In the first phase of modeling, we plan to employ simple imputation strategies (for example, replacing numerical features with the median and categorical features with the mode). This approach ensures the integrity of the training set without introducing strong assumptions.
+
+<strong>Further Cleanning Based on the EDA Result: </strong>
+After finding the what the data can be removed, here is the code for further data cleaning.
+```{r}
+# Reconginse the column needing to remove.
+drop_features <- decision_table %>%
+  filter(startsWith(decision, "Drop"), feature != target_var) %>%
+  pull(feature) %>%
+  unique()
+
+# Remove the portable
+drop_portable <- function(.data) {
+  if ("Configuration2" %in% names(.data)) {
+    .data %>%
+      mutate(Configuration2 = stringr::str_trim(Configuration2)) %>%
+      filter(!stringr::str_equal(stringr::str_to_lower(Configuration2), "portable"))
+  } else {
+    .data
+  }
+}
+
+# Remove the data
+dims_before <- c(nrow(df), ncol(df))
+
+cleaned_data_after_EDA <- df %>%
+  drop_portable() %>%
+  dplyr::select(-dplyr::all_of(drop_features))
+
+dims_after <- c(nrow(cleaned_data_after_EDA), ncol(cleaned_data_after_EDA))
+
+message(sprintf("Rows: %d -> %d  |  Cols: %d -> %d",
+                dims_before[1], dims_after[1], dims_before[2], dims_after[2]))
+
+readr::write_csv(cleaned_data_after_EDA, "cleaned_data_after_EDA.csv")
+
+```
+
+<h3>Data Modeling</h3>
+<strong>Plan for Evaluation: </strong>
+We evaluate models with stratified 5-fold cross-validation to preserve class proportions. All preprocessing (imputation, scaling, and dummy coding) and SMOTE for class imbalance are performed within each fold to prevent data leakage. The primary metric is Macro-F1 (robust to imbalance); Cohen’s Kappa is reported for agreement beyond chance, and Accuracy is included as a reference. After CV, we select the top model and perform a held-out test-set evaluation, reporting Macro-F1, Kappa, Accuracy, the confusion matrix/heatmap, and per-class Precision, Recall, Specificity, F1, and geometric mean, plus macro averages. In our current run, the chosen model attains Macro-F1 ≈ 0.9975, Kappa ≈ 0.9981, and Accuracy ≈ 0.9989 on the test set, consistent with its cross-validated ranking.
+
+<strong>Modeling Choice: </strong>
+Choice of Classification Models 
+We compare a well-justified set of baseline and strong learners that cover linear/low-variance to nonlinear/high-capacity regimes:
+•⁠  ⁠LDA – interpretable linear baseline.
+•⁠  ⁠k-NN – local, nonparametric comparator.
+•⁠  ⁠SVM (linear & RBF) – margin-based models capturing linear and nonlinear boundaries.
+•⁠  ⁠GLMnet (elastic net) – regularised generalised linear model for high-dimensional, correlated features.
+•⁠  ⁠Random Forest (ranger) – ensemble of trees robust to nonlinearities and interactions.
+CV results (Macro-F1 & Kappa dotplots) show RF leading overall, followed by GLMnet and SVM-RBF, while LDA and SVM-linear trail—matching expectations given feature complexity. We therefore include all six for CV comparison and proceed to test-set confirmation with the top model(s).
+```{r confusion-matrix, fig.show='hide'}
+# --- 1) Data ------------------------------------------------------------------
+library(dplyr); library(readr); library(recipes); library(caret)
+library(kernlab); library(glmnet); library(MASS); library(themis); library(ggplot2)
+
+df <- read_csv("cleaned_data_after_EDA.csv",
+               show_col_types = FALSE) |>
+  filter(!is.na(c_star_mixed))  
+# Target: 3 classes ("low","mid","high")
+df <- df %>%
+  mutate(
+    star3 = cut(
+      c_star_mixed,
+      breaks = c(-Inf, 2.5, 4.0, Inf),
+      labels = c("low","mid","high"),
+      right = TRUE, include.lowest = TRUE
+    ) |> factor(ordered = FALSE)
+  )
+# ensure valid factor level names
+stopifnot(all(levels(df$star3) == make.names(levels(df$star3))))
+
+set.seed(42)
+idx   <- caret::createDataPartition(df$star3, p = 0.80, list = FALSE)
+train <- droplevels(df[idx, ])
+test  <- droplevels(df[-idx, ])
+
+stopifnot(identical(levels(train$star3), levels(test$star3)))
+# --- 2) Metric: macro-F1 + Kappa ---------------------------------------------
+macro_f1_kappa <- function(data, lev = NULL, model = NULL) {
+  if (is.null(lev)) lev <- levels(data$obs)
+  obs  <- factor(data$obs,  levels = lev)
+  pred <- factor(data$pred, levels = lev)
+
+  pr <- sapply(lev, function(l) { tp <- sum(obs==l & pred==l); fp <- sum(obs!=l & pred==l); if ((tp+fp)==0) 0 else tp/(tp+fp) })
+  rc <- sapply(lev, function(l) { tp <- sum(obs==l & pred==l); fn <- sum(obs==l & pred!=l); if ((tp+fn)==0) 0 else tp/(tp+fn) })
+  f1 <- mean(ifelse(pr+rc==0, 0, 2*pr*rc/(pr+rc)))
+  kappa <- caret::confusionMatrix(pred, obs)$overall["Kappa"]
+  acc   <- mean(obs == pred)
+
+  c(Mean_F1 = as.numeric(f1), Kappa = as.numeric(kappa), Accuracy = as.numeric(acc))
+}
+# --- 3) Recipes ---------------------------------------------------------------
+base_rec <- recipe(star3 ~ ., data = train) %>%
+  step_rm(any_of(c("c_star_mixed", "ExpDate"))) %>%
+  step_zv(all_predictors())
+
+rec_nonlinear <- base_rec %>%
+  step_novel(all_nominal_predictors(), new_level = "new") %>%
+  step_unknown(all_nominal_predictors(), new_level = "unknown") %>%
+  step_other(all_nominal_predictors(), threshold = 0.02, other = "other") %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
+  step_zv(all_predictors()) %>%  
+  step_impute_median(all_numeric_predictors()) %>%
+  step_smote(star3, over_ratio = 1.5, neighbors = 5) %>%   
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors())
+  
+
+rec_linear <- base_rec %>%
+  step_novel(all_nominal_predictors(), new_level = "new") %>%
+  step_unknown(all_nominal_predictors(), new_level = "unknown") %>%
+  step_other(all_nominal_predictors(), threshold = 0.02, other = "other") %>%
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) %>%
+  step_impute_median(all_numeric_predictors()) %>%
+  step_corr(all_numeric_predictors(), threshold = 0.95) %>%
+  step_lincomb(all_predictors())
+
+rec_knn_pca <- base_rec %>%
+  step_novel(all_nominal_predictors(), new_level = "new") %>%
+  step_unknown(all_nominal_predictors(), new_level = "unknown") %>%
+  step_other(all_nominal_predictors(), threshold = 0.02, other = "other") %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
+  step_zv(all_predictors()) %>%
+  step_impute_median(all_numeric_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_pca(all_numeric_predictors(), threshold = 0.95)
+# --- 4) Cross-validation control ---------------------------------------------
+set.seed(42)
+idx <- createMultiFolds(train$star3, k = 5, times = 1)  
+ctrl <- trainControl(
+  method = "repeatedcv",
+  index  = idx,                 
+  classProbs = FALSE,
+  summaryFunction = macro_f1_kappa,
+  savePredictions = "final",
+  verboseIter = FALSE
+)
+# --- 5) Tuning grids ----------------------------------------------------------
+grid_svm_rbf <- expand.grid(
+  sigma = exp(seq(log(0.01), log(0.20), length = 5)),
+  C     = 2^(0:4)
+)
+grid_svm_lin <- data.frame(cost = c(0.25, 0.5, 1, 2, 4, 8, 16, 32))
+grid_glmnet  <- expand.grid(alpha = seq(0, 1, by = 0.25),
+                            lambda = 10^seq(-3, 1, length = 15))
+grid_kknn    <- expand.grid(kmax = seq(3, 41, 2), distance = 2, kernel = "triangular")
+grid_rf      <- expand.grid(mtry = c(2,4,6,8), splitrule = c("gini","extratrees"),
+                            min.node.size = c(1,3,5))
+# --- 6) Model training (metric = Mean_F1) ------------------------------------
+set.seed(42)
+fit_rf <- train(rec_nonlinear, data = train, method = "ranger",
+                trControl = ctrl, metric = "Mean_F1",
+                tuneGrid = grid_rf, importance = "permutation", num.trees = 800)
+
+set.seed(42)
+fit_svm_rbf <- train(rec_nonlinear, data = train, method = "svmRadial",
+                     trControl = ctrl, metric = "Mean_F1",
+                     tuneGrid  = grid_svm_rbf)
+
+set.seed(42)
+w <- list(low=1, mid=1.2, high=2.5)
+fit_svm_lin <- train(rec_linear, data=train, method="svmLinear3",
+                     trControl=ctrl, metric="Mean_F1",
+                     class.weights = w)  
+
+set.seed(42)
+fit_glmnet <- train(rec_linear, data = train, method = "glmnet",
+                    trControl = ctrl, metric = "Mean_F1",
+                    tuneGrid  = grid_glmnet)
+
+set.seed(42)
+fit_lda <- train(rec_linear, data = train, method = "lda",
+                 trControl = ctrl, metric = "Mean_F1")
+
+set.seed(42)
+fit_kknn <- train(rec_knn_pca, data = train, method = "kknn",
+                  trControl = ctrl, metric = "Mean_F1",
+                  tuneGrid  = grid_kknn)
+# --- 7) CV comparison across models ------------------------------------------
+resamps <- resamples(list(
+  SVMrbf = fit_svm_rbf, SVMlin = fit_svm_lin, RF = fit_rf,
+  GLMnet = fit_glmnet,  LDA    = fit_lda,  kNN = fit_kknn
+))
+# summary(resamps)
+p1 <- dotplot(resamps, metric="Mean_F1", main="Macro-F1 (CV)")
+p2 <- dotplot(resamps, metric="Kappa",   main="Kappa (CV)")
+print(p1, split=c(1,1,2,1), more=TRUE); print(p2, split=c(2,1,2,1), more=FALSE)
+# --- 8) Test-set evaluation (GLMnet) ------------------------------
+# --- 8) Test-set evaluation (RF) ------------------------------
+pred_rf <- predict(fit_rf, newdata = test)   # type="raw"
+
+lev  <- levels(train$star3)
+obs  <- factor(test$star3, levels = lev)
+pred <- factor(pred_rf,   levels = lev)
+
+# Macro-F1 / Accuracy / Kappa on the test set
+macro_f1_kappa(data.frame(obs = obs, pred = pred), lev = lev)  
+
+# Confusion matrix
+cm <- caret::confusionMatrix(pred, obs)
+
+tab <- as.matrix(cm$table)
+acc_from_tab <- sum(diag(tab)) / sum(tab)
+acc_from_cm  <- as.numeric(cm$overall["Accuracy"])
+stopifnot(all.equal(acc_from_tab, acc_from_cm, tolerance = 1e-12))
+
+cm$overall[c("Accuracy","Kappa")]
+# --- 9) Confusion-matrix heatmap ---------------------------------------------
+df_cm <- as.data.frame(cm$table) |>
+  dplyr::rename(Prediction = Prediction, Reference = Reference, n = Freq)
+
+ggplot(df_cm, aes(Reference, Prediction, fill = n)) +
+  geom_tile() + geom_text(aes(label = n), size = 4) +
+  scale_fill_gradient() + coord_equal() +
+  labs(title = "Confusion Matrix (test)", x = "True", y = "Pred")
+# --- 10) Per-class metrics (+ macro row) --------------------------------------
+
+tab <- as.matrix(cm$table)
+lev <- levels(obs)  # obs = factor(test$star3, ...)
+
+precision <- sapply(seq_along(lev), function(i) {
+  tp <- tab[i,i]; fp <- sum(tab[i,]) - tp
+  if (tp + fp == 0) NA_real_ else tp / (tp + fp)
+})
+recall <- sapply(seq_along(lev), function(i) {
+  tp <- tab[i,i]; fn <- sum(tab[,i]) - tp
+  if (tp + fn == 0) NA_real_ else tp / (tp + fn)
+})
+specificity <- sapply(seq_along(lev), function(i) {
+  tp <- tab[i,i]; fp <- sum(tab[i,]) - tp; fn <- sum(tab[,i]) - tp
+  tn <- sum(tab) - (tp + fp + fn)
+  if ((tn + fp) == 0) NA_real_ else tn / (tn + fp)
+})
+f1 <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+gm <- sqrt(precision * recall)
+
+class_report <- data.frame(
+  Class       = lev,
+  Precision   = precision,
+  Recall      = recall,
+  Specificity = specificity,
+  F1          = f1,
+  GM          = gm,
+  Support     = as.vector(table(obs))
+)
+macro_row <- data.frame(
+  Class       = "Macro avg",
+  Precision   = mean(precision,   na.rm = TRUE),
+  Recall      = mean(recall,      na.rm = TRUE),
+  Specificity = mean(specificity, na.rm = TRUE),
+  F1          = mean(f1,          na.rm = TRUE),
+  GM          = mean(gm,          na.rm = TRUE),
+  Support     = sum(class_report$Support)
+)
+print(rbind(class_report, macro_row), row.names = FALSE, digits = 10)
+#Overall Summary
+overall_summary <- c(
+  Accuracy          = acc_from_cm,
+  Kappa             = cm$overall["Kappa"],
+  BalancedAccuracy  = mean(recall, na.rm = TRUE),   # = Macro Recall
+  Macro_F1          = mean(f1, na.rm = TRUE),
+  Macro_Precision   = mean(precision, na.rm = TRUE),
+  Macro_Specificity = mean(specificity, na.rm = TRUE),
+  Macro_GM          = mean(gm, na.rm = TRUE)
+)
+round(overall_summary, 8)
+```
+
+<h3>References</h3>
+- Australian Government Department of Climate Change, Energy, the Environment and Water. (2025, September 18). *Energy Rating Data for household appliances – Labelled Products* \[Data set]. Data.gov.au. [https://data.gov.au/data/dataset/energy-rating-for-household-appliances](https://data.gov.au/data/dataset/energy-rating-for-household-appliances)
+
+<h3>Data Dictionary</h3>
+```{r}
+library(readr)
+library(DT)
+
+dd <- read_csv("../data/raw/data_summary.csv")
+
+DT::datatable(dd, options = list(pageLength = 10, scrollX = TRUE))
+```
+
+
+
+

@@ -1,0 +1,83 @@
+{
+  // Run with Terminal > Run Task (or Ctrl+Shift+P > "Tasks: Run Task").
+  // On Windows the R install directory is prepended to PATH; adjust it if R
+  // lives elsewhere. Order matters: the last `train` you run before `Serve API`
+  // decides which model the API loads (only the default profile writes
+  // models/model.rds; the original profile writes models/model_original.rds).
+  "version": "2.0.0",
+  "options": {
+    "env": {
+      "PATH": "${env:PATH}"
+    }
+  },
+  "windows": {
+    "options": {
+      "env": {
+        "PATH": "C:\\Program Files\\R\\R-4.6.2\\bin;${env:PATH}"
+      }
+    }
+  },
+  "tasks": [
+    {
+      "label": "Tests: all",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["-e", "devtools::test()"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: coverage",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["scripts/coverage.R"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["-e", "pkgload::load_all(quiet = TRUE); print(lintr::lint_package())"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Reproduce original (caret, exact)",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["scripts/reproduce_original.R"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Train: original method",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["exec/acstar.R", "train", "--profile", "original"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Train: leakage-aware (serves the API)",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["exec/acstar.R", "train"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Ablation (leakage experiments)",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["exec/acstar.R", "ablation", "--seeds", "5"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Serve API",
+      "type": "shell",
+      "command": "Rscript",
+      "args": ["exec/acstar.R", "serve"],
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

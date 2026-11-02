@@ -1,0 +1,36 @@
+# R / renv
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+renv/library/
+renv/staging/
+renv/local/
+renv/python/
+
+# Secrets and local settings
+.env
+.Renviron
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Build outputs, models, caches
+models/*
+!models/.gitkeep
+*.Rcheck/
+acstar_*.tar.gz
+/doc/
+/Meta/
+.cache/
+tests/testthat/_snaps/**/*.new.md
+
+# Course material and knitted reports kept locally, not part of the project
+/*.html
+/group_presentation_modified.csv
+/peer_review_template.Rmd

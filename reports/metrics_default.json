@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "profile": "default",
+  "features": ["brand", "rated_aeer", "eertestavg", "c_power_inp_rated", "residential_hspf_hot", "commercial_hspf_hot", "pia_inoperative_power", "commercial_hspf_mixed", "rated_acop", "commercial_hspf_cold", "coptestavg", "residential_hspf_cold", "residential_hspf_mixed", "rated_total_cool_capacity_w", "c_total_cool_rated", "t1_half_cap_power_rated", "commercial_thec_hot", "residential_thec_hot", "h_power_inp_rated", "low_temp_cooling_half_cap_power_rated", "residential_thec_mixed", "commercial_thec_mixed", "h1_half_cap_power_rated"],
+  "feature_labels": ["Brand", "Rated AEER", "EERtestAvg", "C-Power_Inp_Rated", "Residential HSPF_hot", "Commercial HSPF_hot", "PIA inoperative power", "Commercial HSPF_mixed", "Rated ACOP", "Commercial HSPF_cold", "COPtestAvg", "Residential HSPF_cold", "Residential HSPF_mixed", "Rated Total Cool Capacity W", "C-Total Cool Rated", "T1_half_cap_power_rated", "Commercial thec_hot", "Residential thec_hot", "H-Power_Inp_Rated", "Low temp cooling half cap power rated", "Residential thec_mixed", "Commercial thec_mixed", "H1_half_cap_power_rated"],
+  "classes": ["low", "mid", "high"],
+  "breaks": [2.5, 4],
+  "split_strategy": "group",
+  "params": {
+    "mtry": 6,
+    "min_n": 5,
+    "splitrule": "gini"
+  },
+  "cv": {
+    "macro_f1": {
+      "mean": 0.900181,
+      "sd": 0.01813
+    },
+    "kappa": {
+      "mean": 0.835025,
+      "sd": 0.02145
+    },
+    "accuracy": {
+      "mean": 0.904953,
+      "sd": 0.01269
+    },
+    "n_resamples": 6
+  },
+  "test": {
+    "metrics": {
+      "macro_f1": 0.816472,
+      "kappa": 0.770778,
+      "accuracy": 0.872238
+    },
+    "ci95": [
+      {
+        "metric": "macro_f1",
+        "estimate": 0.816472,
+        "lower": 0.785118,
+        "upper": 0.846587
+      },
+      {
+        "metric": "kappa",
+        "estimate": 0.770778,
+        "lower": 0.737592,
+        "upper": 0.806177
+      },
+      {
+        "metric": "accuracy",
+        "estimate": 0.872238,
+        "lower": 0.853987,
+        "upper": 0.891475
+      }
+    ],
+    "per_class": [
+      {
+        "class": "low",
+        "precision": 0.918966,
+        "recall": 0.943363,
+        "f1": 0.931004,
+        "support": 565
+      },
+      {
+        "class": "mid",
+        "precision": 0.798982,
+        "recall": 0.853261,
+        "f1": 0.82523,
+        "support": 368
+      },
+      {
+        "class": "high",
+        "precision": 0.897059,
+        "recall": 0.564815,
+        "f1": 0.693182,
+        "support": 108
+      }
+    ],
+    "confusion": [
+      {
+        "low": 533,
+        "mid": 47,
+        "high": 0,
+        "_row": "low"
+      },
+      {
+        "low": 32,
+        "mid": 314,
+        "high": 47,
+        "_row": "mid"
+      },
+      {
+        "low": 0,
+        "mid": 7,
+        "high": 61,
+        "_row": "high"
+      }
+    ],
+    "twin_overlap": 0
+  },
+  "n_train": 3718,
+  "n_test": 1041,
+  "trained_at": "2026-11-02T20:53:07+0800",
+  "versions": {
+    "R": "4.6.2",
+    "recipes": "1.4.0",
+    "parsnip": "1.6.1",
+    "workflows": "1.3.0",
+    "themis": "1.1.0",
+    "ranger": "0.18.0",
+    "tune": "2.1.0",
+    "rsample": "1.3.2"
+  },
+  "train_seconds": 116.7
+}

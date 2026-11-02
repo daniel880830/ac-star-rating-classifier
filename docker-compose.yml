@@ -1,0 +1,32 @@
+# One image, two services: `train` fits the model into a shared volume and
+# exits; `api` starts only after training finished successfully.
+# The published port comes from API_HOST_PORT in .env (default 8080).
+
+services:
+  train:
+    build: .
+    image: acstar:latest
+    command: ["Rscript", "exec/acstar.R", "train"]
+    environment:
+      APP_PROFILE: ${APP_PROFILE:-default}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+    volumes:
+      - models:/app/models
+
+  api:
+    image: acstar:latest
+    depends_on:
+      train:
+        condition: service_completed_successfully
+    environment:
+      APP_PORT: "8000"
+      APP_MAX_BATCH_SIZE: ${APP_MAX_BATCH_SIZE:-1000}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+    ports:
+      - "${API_HOST_PORT:-8080}:8000"
+    volumes:
+      - models:/app/models:ro
+    restart: unless-stopped
+
+volumes:
+  models:

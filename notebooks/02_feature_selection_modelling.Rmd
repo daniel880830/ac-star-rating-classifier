@@ -1,0 +1,1981 @@
+---
+title: "AC Energy Star Rating, Part 2: Feature Selection and Modelling (original analysis)"
+output:
+  html_document:
+    toc: false
+    toc_float: false
+    number_sections: true
+    code_folding: hide
+    code_download: true
+params:
+  data_path: "../data/raw/ac_2025_09_14.csv"
+  sample_n: 5 
+  top_levels: 10
+---
+
+<style>
+body { font-size:11px; }
+#Head line 1
+h1 { font-size:23px; }
+#Head line 2
+h2 { font-size:17px; }
+#Head line 3
+h3 { font-size:7px; }
+#Normal words don't have to set size
+pre code { font-size:8px; }
+</style>
+
+## Problem Define
+Can energy efficiency be determined by model-guided minimal testing on key performance predictors?
+The demand for air conditioning in Australian households has increased rapidly over the past decade, becoming a significant contributor to residential electricity consumption, particularly during peak summer periods. This rising demand highlights the importance of understanding the factors that affect air-conditioner energy efficiency and cooling performance. According to the Predictors of Residential Air-Conditioner Cooling Behaviour – Final Report for EUDM Work Stream 4.4, residential cooling behaviour varies widely across households due to differences in climate zones, dwelling characteristics, appliance types, and user behaviour. Identifying which factors most strongly affect energy efficiency is therefore essential for guiding both policy and product design.
+
+In real-world problems, assessing the overall energy efficiency of an appliance typically requires multiple costly and time-consuming laboratory tests. However, model-guided prediction can provide a more efficient approach. By analyzing the dataset from data.gov.au—the Australian Government’s open data platform, which contains energy-rating information for household appliances—we can construct a predictive model that identifies the key performance predictors driving energy efficiency outcomes.
+
+Such a model enables two important outcomes:
+1. Policy and industry insight: revealing which physical or behavioural variables most influence efficiency, informing standards and incentive schemes.
+2. Model-guided minimal testing – allowing manufacturers to estimate a product’s environmental performance score using only a subset of key variables rather than exhaustive testing.
+
+## Data Source
+Data.gov.au is the Australian Government’s open-data portal, offering free access to authoritative datasets across government. It helps researchers, developers and businesses discover, reuse and build services from government data to drive transparency, innovation and better decision-making.<br>
+https://data.gov.au/data/dataset/energy-rating-for-household-appliances
+
+## Data Description
+The dataset originates from the Australian Government’s open data portal (data.gov.au) and contains 5,364 air-conditioner records with 167 variables describing products sold in Australia and New Zealand.
+
+The variables can be grouped into five main categories:
+
+- Product information – brand, model, country, and registration details.
+- Technical specifications – dimensions, refrigerant type, and configuration parameters.
+- Performance metrics – cooling and heating capacities across rated and low-temperature conditions.
+- Energy efficiency indicators – efficiency ratios (EER, AEER, COP) and star ratings (c_star_mixed, etc.).
+- Sound and additional features – indoor/outdoor noise levels and optional functionalities.
+
+The target variable is c_star_mixed, representing the cooling energy efficiency star rating used for predictive modeling.
+
+The dataset shows significant missingness and inconsistent data types—several URL or image-related fields have over 70% missing values, and some numeric variables are stored as text.
+It is also high-dimensional (167 features, mostly numeric), requiring thorough cleaning and preprocessing to prevent overfitting and ensure model reliability.
+
+```{r echo=FALSE, class.source="fold-show", message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE
+)
+
+library(dplyr) 
+library(tidyr)
+library(tidyverse)  
+library(ggplot2)   
+library(here)    
+library(ggfortify) 
+library(broom)   
+library(gridExtra)  
+library(funModeling)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+library(glue)
+library(stats)
+library(infotheo)
+library(caret)
+library(ranger)
+# Loading data
+df <- read_csv("cleaned_ac_data.csv")
+```
+
+## Why this dataset is important
+This dataset (5,364 records and 167 fields) is mainly a technical product dataset. It contains model identifiers and product specification fields such as Model_No, Product Class, Configuration2-unitmount, outdoortype, outdoor_sound_level and related performance measures. It is therefore most useful for product-level analyses: classification of product types, compliance and efficiency assessments, comparing technical performance across models, and identifying product variants that may need maintenance or specification updates. The data has an Australian and New Zealand focus, so you can run locally relevant investigations such as regional compliance checks, market availability analysis, and performance comparisons across local climates and installation practices.
+
+## Important Variables and Features
+These features are directly related to the energy efficiency of air-conditioners.
+<strong>Outcome varaible</strong>
+- c_star_mixed: Cooling cycle energy efficiency star rating for the mixed (Richmond, NSW) climate zone.<br>
+<strong>Predictor varaibles</strong>
+- "Rated AEER", "Low-temperature Cooling Half-capacity Power Rated", "PIA Inoperative Power"
+
+## Why the dataset is challenging
+<strong>1.Messy: Missing values</strong>
+Lots of columns have gaps and there're 21 duplicated rows. Missing value is likely non-random, thus, data imputation is needed, but naive imputation can lead bias results. We need thoughtful, per-column strategies and "is_missing" indicators for important features to prevent bias.<br>
+
+<strong>2.Complex: High dimensionality and mixed types</strong>
+With more than 100 features (167 total) this is high-dimensional. This condition increases the risk of overfitting, makes models slower to train, and complicates interpretation. Mixed data types (numeric, categorical) require separate preprocessing paths: numeric scaling or robust imputation, categorical encoding. Several near-constant (zero variance) columns will provide no signal and should be removed early.<br>
+
+<strong>3.Multi-class classification problem: </strong>
+Our dataset requires careful metrics and validation. Accuracy alone is insufficient; we will use Macro-F1, Cohen’s Kappa, and class-wise metrics, apply stratified cross-validation, and perform any resampling (e.g., SMOTE) within each fold only to prevent data leakage.
+
+## Data Cleaning
+The raw dataset contained numerous columns, substantial missing values, and inconsistent formatting. To prepare the data for modeling, we applied a structured cleaning workflow addressing four aspects: (1) standardizing missing values, (2) reducing dimensionality, (3) correcting data types and units, and (4) handling invalid or complex entries. Features of uncertain importance were retained until post-EDA feature selection to avoid premature data loss.
+
+Missing value indicators such as “N/A” and “–” were unified as NA. Records lacking the target variable (c_star_mixed) were removed. We then eliminated irrelevant or redundant columns (e.g., identifiers, zero-variance features, and duplicate variables like C-Power_Inp_Rated and Rated cooling power input kW).
+
+Numeric and categorical types were corrected, and units were standardized (e.g., converting power ratings to kW). Text labels were harmonized by merging similar categories (e.g., “Three” vs. “Three-Phase”) and converting all character fields to uppercase.
+
+For multi-label fields (e.g., Country, Sold_in), we engineered binary indicators for common values and grouped rare ones as “Other.” Logically impossible values—such as negative power inputs or heating data in “Cooling-Only” units—were replaced with NA. A single extreme outlier was also removed.
+
+The resulting cleaned dataset provides a consistent, de-duplicated foundation for EDA and subsequent modeling.
+
+```{R}
+# row dataset to be cleaned
+df <- read_csv("../data/raw/ac_2025_09_14.csv", show_col_types = FALSE)
+# data summary (description of each row compiled from a word file from data source)
+descriptions_df <- read.csv("../data/raw/data_summary.csv")
+
+df_initial_clean <- df %>%
+  mutate(across(where(is.character), ~na_if(., "N/A"))) %>%
+  mutate(across(where(is.character), ~na_if(., "-")))
+
+# create a data frame to store column name, count of missing values, and count of unique value
+initial_summary <- data.frame(
+  ColumnName = names(df_initial_clean),
+  DataType = sapply(df_initial_clean, class),
+  MissingCount = sapply(df_initial_clean, function(x) sum(is.na(x))),
+  UniqueCount = sapply(df_initial_clean, function(x) n_distinct(x))
+) %>%
+  # Update missing value count with missing value percentage
+  mutate(MissingPercentage = (MissingCount / nrow(df_initial_clean)) * 100) %>%
+  dplyr::select(-MissingCount) %>%
+  
+  # join with description
+  left_join(descriptions_df, by = c("ColumnName" = "Column")) %>%
+  
+  arrange(desc(MissingPercentage)) %>%
+  dplyr::select(ColumnName, Description, DataType, MissingPercentage, UniqueCount)
+
+
+columns_to_delete <- c(
+  'avg_pwr_standby_mode',       # 100% NA value
+  'Setting_heat',               # 100% NA value
+  'eermepslev',                 # 100% NA value
+  'TestedOutputEER',            # 100% NA value
+  'TestedOutputCOP',            # 100% NA value
+  'PL_EERMEPS',                 # 100% NA value
+  'PL_COPMEPS',                 # 100% NA value
+  'GrandDate',                  # 100% NA value
+  'star2000_cool',              # 100% NA value
+  'star2000_heat',              # 100% NA value
+  'PL_COPMEPS',                 # Not applicable in description
+  'Family Name',                # Administrative information
+  'Representative Brand URL',   # Administrative information
+  'Product Website',            # Administrative information
+  'Model_No',                   # Administrative information
+  'Registration Number',        # Administrative information
+  'Submit_ID',                  # Administrative information
+  'SubmitStatus',               # Administrative information
+  'Star Image Large',           # Image data
+  'Star Image Small',           # Image data
+  'Rated cool power input with water',  # Only 0 or NA
+  'Rated cool cap with water W',        # Only 0 or NA   
+  'Rated cool cap with water kW',       # Only 0 or NA
+  'Residential tcec_cold with water',   # Only 0 or NA
+  'Residential tcec_mixed with water',  # Only 0 or NA
+  'Residential tcec_hot with water'     # Only 0 or NA
+  
+)
+
+df_processed_3 <- df_initial_clean %>%
+  dplyr::select(-all_of(columns_to_delete))
+
+df_processed_4 <- filter(df_processed_3, !is.na(c_star_mixed)) 
+
+# To numeric
+columns_to_convert <- c(
+  "C-Dehumid_Rated", 
+  "C-Power_Inp_Rated",
+  "C-Sens_Cool_Rated",
+  "C-Total Cool Rated",
+  "Depth",
+  "H2_COP",
+  "H2_HeatPwrCapacity",
+  "H2_HeatPwrInput",
+  "Height",
+  "H-Power_Inp_Rated",
+  "H-Total Heat Rated",
+  "EERtestAvg",
+  "COPtestAvg",
+  "Setting_cool",
+  "Pnoc",
+  "Pnoh",
+  "VSCP_EER50",
+  "VSCP_COP50",
+  "AnnualOutputEER",
+  "AnnualOutputCOP",
+  "sri2010_cool",
+  "sri2010_heat",
+  "Width",
+  "EER",
+  "Rated Total Cool Capacity W",
+  "Rated cooling power input kW",
+  "T1_half_cap_power_rated",
+  "T1_half_cap_cooling_cap_rated",
+  "T1_min_cap_power_rated",
+  "T1_min_cap_cooling_cap_rated",
+  "Low temp cooling full cap power rated",
+  "Low temp cooling full cap rated",
+  "Low temp cooling half cap power rated",
+  "Low temp cooling half cap rated",
+  "Low temp cooling min cap power rated",
+  "Low temp cooling min cap rated",
+  "Rated Heating Capacity watts",
+  "Rated heating power input kW",
+  "H1_half_cap_power_rated",
+  "H1_half_cap_heat_cap_rated",
+  "H1_min_cap_power_rated",
+  "H1_min_cap_heat_cap_rated",
+  "H2_ext_cap_power_rated",
+  "H2_ext_cap_heat_cap_rated",
+  "H2_full_cap_power_rated",
+  "H2_full_cap_power_rated",
+  "H2_full_cap_heat_cap_rated",
+  "H2_half_cap_power_rated",
+  "H2_half_cap_heat_cap_rated",
+  "H2_min_cap_power_rated",
+  "H2_min_cap_heat_cap_rated",
+  "H3_ext_cap_power_rated",
+  "H3_ext_cap_heat_cap_rated",
+  "H3_full_cap_power_rated",
+  "H3_full_cap_heat_cap_rated",
+  "H3_half_cap_power_rated",
+  "H3_half_cap_heat_cap_rated",
+  "indoor_sound_level",
+  "outdoor_sound_level",
+  "Residential TCSPF_cold",
+  "Residential TCSPF_mixed",
+  "Residential TCSPF_hot",
+  "Commercial TCSPF_cold",
+  "Commercial TCSPF_mixed",
+  "Commercial TCSPF_hot",
+  "Residential tcec_cold",
+  "Residential tcec_mixed",
+  "Residential tcec_hot",
+  "Commercial tcec_cold",
+  "Commercial tcec_mixed",
+  "Commercial tcec_hot",
+  "Residential HSPF_cold",
+  "Residential HSPF_mixed",
+  "Residential HSPF_hot",
+  "Commercial HSPF_cold",
+  "Commercial HSPF_mixed",
+  "Commercial HSPF_hot",
+  "Residential thec_cold",
+  "Residential thec_mixed",
+  "Residential thec_hot",
+  "Commercial thec_cold",
+  "Commercial thec_mixed",
+  "Commercial thec_hot",
+  "PIA inoperative power",
+  "Rated AEER",
+  "Rated ACOP"
+  )
+
+# 3. Use mutate() and across() to apply the conversion
+df_processed_4_5 <- df_processed_4 %>%
+  mutate(across(all_of(columns_to_convert), as.numeric))
+
+columns_to_factor <- c(
+  "ApplStandard", 
+  "MEPSComp", 
+  "N-Standard",
+  "Brand",
+  "Configuration1",
+  "Configuration2",
+  "Configuration2-unitmount",
+  "Configuration3_Sink",
+  "Configuration3_Source",
+  "Country",
+  "indoorType",
+  "Invert",
+  "Star2010_Cool",
+  "Star2010_Heat",
+  "outdoortype",
+  "Phase",
+  "Refrigerant",
+  "Sold_in",
+  "Type",
+  "Product Class",
+  "Demand Response Capability",
+  "Demand Response 1",
+  "Demand Response 2",
+  "Demand Response 4",
+  "Demand Response 5",
+  "Demand Response 6",
+  "Demand Response 7",
+  "PartNumber",
+  "Availability Status",
+  "Variable Output Compressor",
+  "Have T1 half cap results",
+  "Have T1 min cap results",
+  "Have low temp cool full cap results",
+  "Have low temp cool half cap results",
+  "Have low temp cool min cap results",
+  "Have H1 min cap results",
+  "Have H2 extended mode results",
+  "Have H2 full mode results",
+  "Have H2 half capacity results",
+  "Have H2 min capacity results",
+  "Have H3 extended mode results",
+  "Have H3 full mode results",
+  "Have H3 half capacity results",
+  "c_star_cold",
+  "c_star_mixed",
+  "c_star_hot",
+  "h_star_cold",
+  "h_star_mixed",
+  "h_star_hot",
+  "Outdoor unit only",
+  "Have_water_tank",
+  "Is variable speed",
+  "Type variable output",
+  "Var output compressor",
+  "Variable output rated as fixed sp"
+  )
+
+df_processed_5 <- df_processed_4_5 %>%
+  mutate(across(all_of(columns_to_factor), factor))
+
+
+df_processed_6 <- df_processed_5 %>%
+  mutate(`C-Dehumid_Rated` = if_else(
+    `C-Dehumid_Rated` > 1000,       
+    `C-Dehumid_Rated` / 1000,       
+    `C-Dehumid_Rated`                     
+  ))
+
+
+# Calculate the frequency of each country, handling both separators
+country_frequency <- df_processed_6 %>%
+  separate_rows(Country, sep = ",") %>%
+  mutate(Country = trimws(Country)) %>%
+  filter(Country != "") %>%
+  count(Country, name = "Frequency") %>%
+  arrange(desc(Frequency))
+
+country_frequency <- df_processed_6 %>%
+  separate_rows(Country, sep = ",") %>%
+  mutate(Country = trimws(Country)) %>%
+  filter(Country != "") %>%
+  count(Country, sort = TRUE, name = "Frequency")
+
+top_7_countries <- country_frequency %>%
+  top_n(7, wt = Frequency) %>%
+  pull(Country)
+
+df_with_country_features <- df_processed_6 %>%
+  mutate(row_id = row_number()) %>%
+  # Split the comma-separated countries into separate rows
+  separate_rows(Country, sep = ",") %>%
+  mutate(Country = trimws(Country)) %>%
+  filter(Country != "") %>%
+  # Re-label any country not in the top 7 as "Other"
+  mutate(Country_Cleaned = if_else(Country %in% top_7_countries, Country, "Other")) %>%
+  # Add a column with the value "Yes" that we will use to create the new columns
+  mutate(Value = "Yes") %>%
+  # Ensure each original row has only one entry per cleaned country
+  distinct(row_id, Country_Cleaned, .keep_all = TRUE) %>%
+  # Pivot the data to create the new "Yes"/"No" columns
+  pivot_wider(
+    id_cols = row_id,
+    names_from = Country_Cleaned,
+    names_prefix = "Country_", # Optional: adds a prefix to new column names
+    values_from = Value,
+    values_fill = "No" # For any country not present, fill with "No"
+  )
+
+# Join the newly created features back to the original dataframe, removing the old 'Country' column
+df_processed_7 <- df_processed_6 %>%
+  dplyr::select(-Country) %>%
+  mutate(row_id = row_number()) %>%
+  left_join(df_with_country_features, by = "row_id") %>%
+  dplyr::select(-row_id) # Remove the temporary row ID
+
+# Calculate the frequency of each country, handling both separators
+Sold_in_frequency <- df_processed_7 %>%
+  separate_rows(Sold_in, sep = ",") %>%
+  mutate(Sold_in = trimws(Sold_in)) %>%
+  filter(Sold_in != "") %>%
+  count(Sold_in, name = "Frequency") %>%
+  arrange(desc(Frequency))
+print(Sold_in_frequency)
+
+df_with_sold_in_features <- df_processed_7 %>%
+  mutate(row_id = row_number()) %>%
+  # Split the comma-separated locations in the "Sold_in" column
+  separate_rows(Sold_in, sep = ",") %>%
+  mutate(Sold_in = trimws(Sold_in)) %>%
+  filter(Sold_in != "") %>%
+  # Add a column with the value "Yes" to use for creating the new columns
+  mutate(Value = "Yes") %>%
+
+  distinct(row_id, Sold_in, .keep_all = TRUE) %>%
+
+  pivot_wider(
+    id_cols = row_id,
+    names_from = Sold_in, # Use the "Sold_in" column for new column names
+    names_prefix = "Sold_in_", 
+    values_from = Value,
+    values_fill = "No" # Fill missing combinations with "No"
+  )
+
+df_processed_8 <- df_processed_7 %>%
+  dplyr::select(-Sold_in) %>% # Remove the original "Sold_in" column
+  mutate(row_id = row_number()) %>%
+  left_join(df_with_sold_in_features, by = "row_id") %>%
+  dplyr::select(-row_id) 
+
+# setting graph size
+knitr::opts_chunk$set(fig.width = 3, fig.height = 2)
+
+# Get all unique combinations of 2 column names
+column_pairs <- combn(names(df_processed_8), 2, simplify = FALSE)
+# Create a function to check if two columns are identical (handling NAs)
+are_columns_identical <- function(df, col1_name, col2_name) {
+  # Extract the columns
+  col1 <- df[[col1_name]]
+  col2 <- df[[col2_name]]
+  # Check for equality. This is TRUE if values are the same,
+    clean_col1 <- as.character(col1)
+  clean_col2 <- as.character(col2)
+  # perform the comparison on the character vectors
+  all((clean_col1 == clean_col2) | (is.na(clean_col1) & is.na(clean_col2)))
+}
+# Apply this function to every pair of columns
+is_pair_identical <- sapply(column_pairs, function(pair) {
+  are_columns_identical(df_processed_8, pair[1], pair[2])
+})
+# Filter to get only the pairs that are identical
+identical_pairs_list <- column_pairs[is_pair_identical]
+
+# Format the result into a clean data frame and print it
+if (length(identical_pairs_list) > 0) {
+  identical_pairs_df <- do.call(rbind, lapply(identical_pairs_list, function(p) {
+    data.frame(Column1 = p[1], Column2 = p[2], stringsAsFactors = FALSE)
+  }))
+  
+  print("Found the following identical column pairs:")
+  print(identical_pairs_df)
+} else {
+  print("No identical column pairs were found.")
+}
+
+
+df_processed_9 <- df_processed_8 %>%
+  # Consolidate the identical pairs by removing the redundant columns
+  dplyr::select(
+    -`Rated cooling power input kW`,
+    -`Rated heating power input kW`
+  ) %>%
+  
+  # Remove the significant outliers, while explicitly keeping NA rows
+  filter(`C-Power_Inp_Rated` != 22952 | is.na(`C-Power_Inp_Rated`)) %>%
+  filter(`H-Power_Inp_Rated` != 19242 | is.na(`H-Power_Inp_Rated`))
+
+heat_related_columns <- c(
+  "H-Power_Inp_Rated",
+  "H-Total Heat Rated",
+  "COPtestAvg",
+  "Rated Heating Capacity watts", # Use the name with dots if R converted it
+  "Residential thec_cold",
+  "Residential thec_mixed",
+  "Residential thec_hot",
+  "h_star_cold",
+  "h_star_mixed",
+  "h_star_hot",
+  "Rated ACOP"
+)
+
+# 2. Apply the conditional replacement
+df_processed_10 <- df_processed_9 %>%
+  mutate(across(all_of(heat_related_columns), 
+                ~as.numeric(as.character(.)))) %>%
+  mutate(across(all_of(heat_related_columns), 
+                ~if_else(Type == "Cooling Only" & . == 0, NA_real_, .)))
+
+df_processed_11 <- df_processed_10 %>%
+  mutate(Phase = replace(Phase, Phase == "Three-Phase", "Three"))
+
+columns_to_clean <- c(
+  "Residential TCSPF_cold",
+  "Residential TCSPF_mixed",
+  "Residential TCSPF_hot",
+  "Commercial TCSPF_cold",
+  "Commercial TCSPF_mixed",
+  "Commercial TCSPF_hot",
+  "Residential tcec_cold",
+  "Residential tcec_mixed",
+  "Residential tcec_hot",
+  "Commercial tcec_cold",
+  "Commercial tcec_mixed",
+  "Commercial tcec_hot"
+)
+
+df_processed_12 <- df_processed_11 %>%
+  mutate(across(all_of(columns_to_clean), 
+                ~if_else(. < 0, NA_real_, .)))
+
+
+df_processed_13 <- df_processed_12 %>%
+    mutate(across(where(~is.character(.) | is.factor(.)), toupper))
+
+
+write_csv(df_processed_13, "cleaned_ac_data.csv")
+
+dim(df_processed_13)
+
+summary <- data.frame(
+  ColumnName = names(df_processed_13),
+  DataType = sapply(df_processed_13, class),
+  MissingCount = sapply(df_processed_13, function(x) sum(is.na(x))),
+  UniqueCount = sapply(df_processed_13, function(x) n_distinct(x))
+) %>%
+  # Calculate the percentage of missing values
+  mutate(MissingPercentage = (MissingCount / nrow(df_processed_13)) * 100) %>%
+  # Remove the original raw count column
+  dplyr::select(-MissingCount) %>%
+  # Arrange the rows in descending order of the missing percentage
+  arrange(desc(MissingPercentage))
+
+# Print the final, sorted summary
+#View(summary)
+```
+
+## Feature Statistics Summary
+
+### Numeric Features Summary
+
+```{r echo=FALSE, class.source="fold-show", message=FALSE, warning=FALSE}
+# ================================================================
+#  Numeric Feature Summary (Text Output Version)
+# ================================================================
+
+# 1. Identify numeric features
+numeric_features <- df %>% select(where(is.numeric)) %>% names()
+
+# 2. Compute summary statistics
+numeric_summary <- df %>%
+  select(where(is.numeric)) %>%
+  pivot_longer(everything(), names_to = "Feature", values_to = "Value") %>%
+  group_by(Feature) %>%
+  summarise(
+    N = sum(!is.na(Value)),
+    Missing = sum(is.na(Value)),
+    MissingRate = round(sum(is.na(Value)) / n() * 100, 1),
+    Mean = round(mean(Value, na.rm = TRUE), 2),
+    SD = round(sd(Value, na.rm = TRUE), 2),
+    Min = round(min(Value, na.rm = TRUE), 2),
+    Q25 = round(quantile(Value, 0.25, na.rm = TRUE), 2),
+    Median = round(median(Value, na.rm = TRUE), 2),
+    Q75 = round(quantile(Value, 0.75, na.rm = TRUE), 2),
+    Max = round(max(Value, na.rm = TRUE), 2),
+    Skewness = round(moments::skewness(Value, na.rm = TRUE), 2)
+  ) %>%
+  arrange(desc(N))
+
+# 3. Generate concise text summary (clean + robust)
+valid_numeric_summary <- numeric_summary[is.finite(numeric_summary$MissingRate), ]
+
+if (nrow(valid_numeric_summary) == 0) {
+  cat("No valid numeric variables found.\n")
+} else {
+  avg_missing <- mean(valid_numeric_summary$MissingRate, na.rm = TRUE)
+  avg_mean     <- mean(valid_numeric_summary$Mean, na.rm = TRUE)
+  avg_sd       <- mean(valid_numeric_summary$SD, na.rm = TRUE)
+  
+  max_idx <- which.max(valid_numeric_summary$MissingRate)
+  worst_var <- valid_numeric_summary$Feature[max_idx]
+  worst_missing <- valid_numeric_summary$MissingRate[max_idx]
+  
+  cat(
+    "There are", length(numeric_features), "numeric variables in total.\n",
+    "The average missing rate across numeric variables is",
+    sprintf("%.1f%%.", avg_missing), "\n",
+    "On average, the numeric features have a mean value of",
+    sprintf("%.2f ± %.2f.", avg_mean, avg_sd), "\n",
+    "The variable with the highest missing rate is",
+    worst_var, sprintf("(%.1f%% missing).", worst_missing)
+  )
+}
+
+```
+
+The result shows some information about the numeric features. Based on the Skewness, the data seems to have following distribution:
+1.Normal Distribution (Skewness ≈ 0): Means that variables with values close to 0.
+2. Right-skewed (Skewness > -1): Means that data have the majority of low values with few high outliers.
+3. Left-skewed (Skewness < -1): The majority of high values with few low outliers. 
+Some variables have high missing percentage, which may have limited predictive power.
+
+### Categorical Features Summary
+
+```{r echo=FALSE, class.source="fold-show", message=FALSE, warning=FALSE}
+categorical_features <- df %>% 
+  select(where(~is.character(.) | is.factor(.))) %>%
+  names()
+
+# Create summary for categorical features
+categorical_summary <- df %>%
+  select(where(~is.character(.) | is.factor(.))) %>%
+  pivot_longer(everything(), names_to = "Feature", values_to = "Value") %>%
+  group_by(Feature) %>%
+  summarise(
+    N = sum(!is.na(Value)),
+    Missing = sum(is.na(Value)),
+    `Missing %` = round(sum(is.na(Value)) / n() * 100, 1),
+    `Unique Categories` = n_distinct(Value, na.rm = TRUE),
+    `Most Common` = names(sort(table(Value), decreasing = TRUE))[1],
+    `Most Common Count` = max(table(Value)),
+    `Most Common %` = round(max(table(Value)) / sum(!is.na(Value)) * 100, 1)
+  ) %>%
+  arrange(desc(N))
+
+# Display table
+#kable(categorical_summary, 
+#      caption = "Categorical Features Summary") %>%
+#  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+#                font_size = 11,
+#                fixed_thead = TRUE) %>%
+#  scroll_box(height = "250px")
+
+cat("Total categorical variables:", nrow(categorical_summary), "\n")
+cat("Mean number of unique levels per variable:",
+    round(mean(categorical_summary$Levels), 1), "\n")
+cat("Variables with >10 unique levels:",
+    sum(categorical_summary$Levels > 10), "\n")
+
+```
+
+The information of categorical features shows that: 
+1. Some variables have extreme missing value problem. 
+2. High concentrated: Variables where the most common category exceeds 80% indicates significant imbalance. So the special handling during the modeling part is necessary.
+3. Moderate concentrated: some variables that the balanced category proportions (most common < 50%) provide the better information gain.
+
+## Target Variable Analysis
+
+```{r echo=FALSE, class.source="fold-show", fig.width=12, fig.height=4, message=FALSE, warning=FALSE}
+if("c_star_mixed" %in% names(df)) {
+  # value
+  if(!is.numeric(df$c_star_mixed)) {
+    df$c_star_mixed <- as.numeric(as.character(df$c_star_mixed))
+  }
+  
+  # Histogram
+  p1 <- ggplot(df, aes(x = c_star_mixed)) +
+    geom_histogram(binwidth = 0.5, fill = "steelblue", alpha = 0.7, na.rm = TRUE) +
+    geom_vline(aes(xintercept = mean(c_star_mixed, na.rm = TRUE)), 
+               color = "red", linetype = "dashed", linewidth = 1) +
+    labs(title = "Distribution of c_star_mixed",
+         subtitle = paste("Mean:", round(mean(df$c_star_mixed, na.rm = TRUE), 2),
+                          "| SD:", round(sd(df$c_star_mixed, na.rm = TRUE), 2)),
+         x = "Star Rating", y = "Count") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 12, face = "bold"))
+  
+  # 3. Boxplot
+  p2 <- ggplot(df, aes(x = "", y = c_star_mixed)) + 
+    geom_boxplot(fill = "lightgreen", alpha = 0.7, na.rm = TRUE) +
+    stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "red") +
+    labs(title = "Boxplot",
+         subtitle = paste("Median:", median(df$c_star_mixed, na.rm = TRUE),
+                          "| IQR:", 
+                          quantile(df$c_star_mixed, 0.25, na.rm = TRUE), "-",
+                          quantile(df$c_star_mixed, 0.75, na.rm = TRUE)),
+         x = "", y = "Star Rating") +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          plot.title = element_text(size = 12, face = "bold"))
+  
+  # 4. Count by class
+  target_counts <- df %>%
+    filter(!is.na(c_star_mixed)) %>%
+    count(c_star_mixed) %>%
+    mutate(percentage = n / sum(n) * 100)
+  
+  # 5. Bar chart
+  p3 <- ggplot(target_counts, aes(x = factor(c_star_mixed), y = n, fill = factor(c_star_mixed))) +
+    geom_col(alpha = 0.7) +
+    geom_text(aes(label = paste0(n, "\n(", round(percentage, 1), "%)")), 
+              vjust = -0.3, size = 3) +
+    labs(title = "Class Distribution",
+         subtitle = paste("Total N =", sum(target_counts$n)),
+         x = "Star Rating", y = "Count") +
+    theme_minimal() +
+    theme(legend.position = "none",
+          plot.title = element_text(size = 12, face = "bold"))
+  
+  # 6. Combine the graphs
+  grid.arrange(p1, p2, p3, ncol = 3,
+               top = "Target Variable Analysis: c_star_mixed")
+}
+
+```
+
+The graph shows the distribution of target variable, c_star_mixed, containing histogram, boxplot and a bar chart. The Histogram and bar chart shows the mean of our target is 2.48 star, and the distribution seems as a right-skewed, primarily concentrated in the 2-3 star range, with a median of 2.5. Low-star samples account for about 10%, whereas high-star AC are vary rare, comparing only 2% of the samples. 
+
+Boxplot also shown the same trend, the median of our target is 2.5 star and the IQR is 1.5-3.5.
+
+From a modeling perspective, the target variable demonstrates a moderate class imbalance. So during model training, we need to adjustment of class weight or other methods to prevent bias towards the dominant classes.
+
+## PCA - Dimensionality Reduction
+
+In this dataset, there are 7 numerical features forming a moderately high-dimensional feature space. Many of these specifications are correlated, introducing multicollinearity and motivating dimensionality reduction through PCA to identify the main patterns of variation.
+
+The PCA process began with 7 numerical variables, removing none for missingness or zero variance, resulting in a final dataset of 5,364 rows × 7 features.
+
+```{r echo=FALSE, class.source="fold-show", message=FALSE, warning=FALSE, results='asis'}
+# Select features for PCA
+pca_features <- df %>%
+  select(where(is.numeric)) %>%
+  # Exclude the target variable
+  select(-any_of("c_star_mixed")) %>%
+  # Exclude identifiers
+  select(-any_of(c("PartNumber", "ExpDate"))) %>%
+  # Only keep features with variance > 0
+  select(where(~ var(., na.rm = TRUE) > 0))
+
+# Check missing values
+missing_summary <- sapply(pca_features, function(x) sum(is.na(x)))
+
+# Remove features with >50% missing
+high_missing <- names(which(missing_summary > nrow(pca_features) * 0.5))
+pca_features_clean <- pca_features %>% select(-any_of(high_missing))
+
+# Impute missing values with median
+pca_filled <- pca_features_clean
+for(col in names(pca_filled)) {
+  if(any(is.na(pca_filled[[col]]))) {
+    pca_filled[[col]][is.na(pca_filled[[col]])] <- median(pca_filled[[col]], na.rm = TRUE)
+  }
+}
+
+# Perform PCA
+pca_result <- prcomp(pca_filled, center = TRUE, scale. = TRUE)
+pca_summary <- summary(pca_result)
+variance_explained <- pca_summary$importance[2, ]
+cumulative_variance <- pca_summary$importance[3, ]
+
+# Output summary
+cat("**PCA Data Preparation Summary:**\n\n")
+cat("- Initial numeric features:", ncol(pca_features), "\n")
+cat("- Features removed (>50% missing):", length(high_missing), "\n")
+cat("- Remaining features for PCA:", ncol(pca_features_clean), "\n")
+cat("- Final dimension:", nrow(pca_filled), "rows ×", ncol(pca_filled), "features\n\n")
+
+cat("**PCA Results (First 5 Components):**\n\n")
+pca_table <- data.frame(
+  Component = paste0("PC", 1:5),
+  `Variance Explained` = paste0(round(variance_explained[1:5] * 100, 1), "%"),
+  `Cumulative Variance` = paste0(round(cumulative_variance[1:5] * 100, 1), "%")
+)
+kable(pca_table, col.names = c("Component", "Variance Explained", "Cumulative Variance")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE) %>%
+  cat()
+```
+
+The table shows the proportion of variance explained by each principal component.
+PC1 explains 33.4% of the total variance, PC2 contributes 28.2%, and PC3 adds 23.7%, together accounting for 85.3% of the total variability. Including PC4 brings the cumulative variance to 99.5%, meaning almost all the information from the original data can be represented by the first four principal components.
+
+This indicates that dimensionality reduction is highly effective — most of the variation is captured within a compact four-dimensional subspace, substantially simplifying the dataset while preserving nearly all its explanatory structure.
+
+### PCA - Variance Explained
+
+```{r echo=FALSE, class.source="fold-show", fig.width=6, fig.height=3, message=FALSE, warning=FALSE}
+# Create scree plot data
+n_pcs <- min(20, length(variance_explained))
+scree_data <- data.frame(
+  PC_num = 1:n_pcs,
+  PC = paste0("PC", 1:n_pcs),
+  Variance_Explained = variance_explained[1:n_pcs] * 100,
+  Cumulative = cumulative_variance[1:n_pcs] * 100
+)
+
+# Convert PC to factor with correct order
+scree_data$PC <- factor(scree_data$PC, levels = paste0("PC", 1:n_pcs))
+
+# Scree plot
+p1 <- ggplot(scree_data, aes(x = PC, y = Variance_Explained)) +
+  geom_col(fill = "steelblue", alpha = 0.7) +
+  geom_line(aes(y = Cumulative, group = 1), color = "red", linewidth = 1) +
+  geom_point(aes(y = Cumulative), color = "red", size = 2) +
+  labs(title = "PCA - Variance Explained (Scree Plot)",
+       subtitle = "Blue bars: individual variance | Red line: cumulative variance",
+       x = "Principal Components",
+       y = "Percentage (%)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(p1)
+```
+
+The blue bars represent the proportion of variance explained by each principal component, while the red line indicates the cumulative variance.
+PC1 explains roughly one-third of the total variance, and PC2 adds another similar share, together capturing more than 60%. The contribution continues to decline with PC3 and PC4, after which the curve flattens — marking a clear elbow around PC4.
+
+This pattern indicates that most of the dataset’s variability can be represented in the first few components. Beyond PC4, additional dimensions add minimal new information, suggesting that three to four components are sufficient to preserve the essential structure for downstream modeling.
+
+### PCA Scatter Plots - Class Separability
+
+```{r echo=FALSE, class.source="fold-show", fig.width=12, fig.height=4, message=FALSE, warning=FALSE, results='asis'}
+# Create star rating groups
+target_for_pca <- df$c_star_mixed
+star_group <- cut(target_for_pca, 
+                  breaks = c(-Inf, 2.5, 4.0, Inf),
+                  labels = c("low", "mid", "high"),
+                  right = TRUE, 
+                  include.lowest = TRUE)
+
+# Create PCA data frame
+pca_data <- data.frame(
+  PC1 = pca_result$x[, 1],
+  PC2 = pca_result$x[, 2],
+  PC3 = pca_result$x[, 3],
+  Star_Group = star_group
+)
+
+# Remove rows with NA
+pca_data_clean <- pca_data %>% filter(!is.na(Star_Group))
+
+# Get group counts
+group_dist <- table(pca_data_clean$Star_Group)
+cat("**PCA Scatter Plot Summary:**\n\n")
+cat("- Total observations:", nrow(pca_data_clean), "\n")
+cat("- Low (≤2.5):", group_dist["low"], "samples\n")
+cat("- Mid (2.5-4.0):", group_dist["mid"], "samples\n")
+cat("- High (≥4.0):", group_dist["high"], "samples\n\n")
+
+# Define colors and shapes
+group_colors <- c("low" = "tomato", "mid" = "skyblue", "high" = "lightgreen")
+group_shapes <- c("low" = 16, "mid" = 17, "high" = 15)
+
+# Plot 1: PC1 vs PC2
+p2 <- ggplot(pca_data_clean, aes(x = PC1, y = PC2, color = Star_Group, shape = Star_Group)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  stat_ellipse(level = 0.95, linetype = "solid", linewidth = 0.7) +
+  scale_color_manual(values = group_colors, name = "Star") +
+  scale_shape_manual(values = group_shapes, name = "Star") +
+  labs(title = "PC1 vs PC2",
+       x = paste0("PC1 (", round(variance_explained[1] * 100, 1), "%)"),
+       y = paste0("PC2 (", round(variance_explained[2] * 100, 1), "%)")) +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 11),
+        axis.title = element_text(size = 9), legend.text = element_text(size = 8))
+
+# Plot 2: PC1 vs PC3
+p3 <- ggplot(pca_data_clean, aes(x = PC1, y = PC3, color = Star_Group, shape = Star_Group)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  stat_ellipse(level = 0.95, linetype = "solid", linewidth = 0.7) +
+  scale_color_manual(values = group_colors, name = "Star") +
+  scale_shape_manual(values = group_shapes, name = "Star") +
+  labs(title = "PC1 vs PC3",
+       x = paste0("PC1 (", round(variance_explained[1] * 100, 1), "%)"),
+       y = paste0("PC3 (", round(variance_explained[3] * 100, 1), "%)")) +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 11),
+        axis.title = element_text(size = 9), legend.text = element_text(size = 8))
+
+# Plot 3: PC2 vs PC3
+p4 <- ggplot(pca_data_clean, aes(x = PC2, y = PC3, color = Star_Group, shape = Star_Group)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  stat_ellipse(level = 0.95, linetype = "solid", linewidth = 0.7) +
+  scale_color_manual(values = group_colors, name = "Star") +
+  scale_shape_manual(values = group_shapes, name = "Star") +
+  labs(title = "PC2 vs PC3",
+       x = paste0("PC2 (", round(variance_explained[2] * 100, 1), "%)"),
+       y = paste0("PC3 (", round(variance_explained[3] * 100, 1), "%)")) +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 11),
+        axis.title = element_text(size = 9), legend.text = element_text(size = 8))
+
+# Combine three plots
+grid.arrange(p2, p3, p4, ncol = 3,
+             top = "PCA Scatter Plots - Distribution by Energy Efficiency (Star Rating)")
+```
+
+This analysis visualizes PCA projections of all air-conditioner units.
+Red points represent low-efficiency (≤2.5 star, 3,136 samples), blue for mid-efficiency (2.5–4.0 star, 1,758 samples), and green for high-efficiency (≥4.0 star, 413 samples).
+
+In the PC1–PC2 plane, low-efficiency products extend slightly along PC1, but heavy overlap persists.
+Although PC1 (33.4%) and PC2 (28.2%) together explain over 60% of variance, clear boundaries are absent—indicating that non-linear classifiers are needed for separation.
+
+The PC1–PC3 view adds another 23.7% of variance.
+High-efficiency units show mild upward separation, but overlap remains substantial, confirming that efficiency differences are mainly driven by PC1.
+
+Finally, PC2–PC3 shows minimal separation, reinforcing that most discriminative information lies along PC1.
+Overall, PCA suggests that energy efficiency is largely explained by a single dominant latent factor.
+
+### Feature Contributions to Principal Components
+
+```{r echo=FALSE, class.source="fold-show", fig.width=8, fig.height=3, message=FALSE, warning=FALSE}
+# Feature Contributions
+loadings <- pca_result$rotation[, 1:2]
+loadings_df <- data.frame(
+  Feature = rownames(loadings),
+  PC1 = loadings[, 1],
+  PC2 = loadings[, 2]
+) %>%
+  mutate(PC1_abs = abs(PC1), PC2_abs = abs(PC2)) %>%
+  arrange(desc(PC1_abs))
+
+# Get top 10 for each PC
+top_10_pc1 <- head(loadings_df, 10)
+top_10_pc2 <- loadings_df %>% arrange(desc(PC2_abs)) %>% head(10)
+
+# Plot for PC1
+p5 <- ggplot(top_10_pc1, aes(x = reorder(Feature, PC1_abs), y = PC1)) +
+  geom_col(aes(fill = PC1 > 0), alpha = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "coral"),
+                   labels = c("Negative", "Positive")) +
+  labs(title = "Top 10 Features Contributing to PC1", x = "", y = "Loading Value", fill = "Direction") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 11),
+        axis.text.y = element_text(size = 8), axis.title = element_text(size = 9),
+        legend.text = element_text(size = 8))
+
+# Plot for PC2
+p6 <- ggplot(top_10_pc2, aes(x = reorder(Feature, PC2_abs), y = PC2)) +
+  geom_col(aes(fill = PC2 > 0), alpha = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "coral"),
+                   labels = c("Negative", "Positive")) +
+  labs(title = "Top 10 Features Contributing to PC2", x = "", y = "Loading Value", fill = "Direction") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(size = 11),
+        axis.text.y = element_text(size = 8), axis.title = element_text(size = 9),
+        legend.text = element_text(size = 8))
+
+# Combine two plots
+grid.arrange(p5, p6, ncol = 2, top = "Feature Loadings on Principal Components")
+```
+
+The bar charts illustrate the top features contributing to the first two principal components.
+
+For PC1, the dominant contributors are C-Total Cool Rated and Rated Total Cool Capacity (W) on the positive side, contrasted with EERtestAvg and Rated AEER on the negative side.
+This component therefore reflects a trade-off between cooling capacity and efficiency — larger units tend to have higher cooling power but lower efficiency indices, while smaller or optimized units show the opposite pattern.
+
+For PC2, C-Power_Inp_Rated and Rated cooling power input (kW) have the highest positive loadings, with smaller negative contributions from cooling capacity variables.
+This suggests PC2 captures energy-input intensity, differentiating models by their rated power consumption rather than pure size.
+Together, these two components highlight how physical design and energy efficiency interact: PC1 encodes capacity-efficiency balance, while PC2 separates products by power demand and input performance.
+
+## EDA Conclusion
+In conclusion, based on the EDA, the answer of our research question: "Can energy efficiency be determined by technical features only?" is YES, but with important notices, there are some overlap exists, especially in mid-range AC products. Therefore it is necessary to consider the non-linear models to capture complex interactions in following section. 
+
+## Feature selection steps
+We first prepared the dataset by converting the target variable to a categorical factor and removing rows with missing target values. To prevent data leakage, variables directly used in the star-rating calculation(Appendix 1) were manually removed, and numerical features highly correlated with the target (|r| > 0.8) were excluded, following best practices for avoiding feature-target leakage (Bouke et al., 2024; Starcke et al., 2025). Besides, these manually excluded variables are officially defined in the regulatory documents as components used to calculate the target variable c_star_mixed, ensuring transparency and compliance with the data source specification. Numerical and categorical features were then separated, and columns with over 40 percent missing data were dropped, consistent with established recommendations to remove features with high missing-value ratios that can bias models (Analytics Vidhya, 2021; Tidymodels, 2025; Alwosheel et al., 2021). The remaining features were evaluated using four complementary selection methods, and the top variables covering at least 90 percent of cumulative importance were retained for modelling.
+
+
+```{r results='hide'}
+# ================================================================
+#  Step 1: Load and prepare data
+# ================================================================
+df <- read.csv("cleaned_data_after_EDA.csv")
+df$c_star_mixed <- as.factor(df$c_star_mixed)
+df <- df[!is.na(df$c_star_mixed), ]
+
+# ================================================================
+#  Step 2: Prevent Data Leakage
+# ================================================================
+
+# ---- 2.1 Manually defined leakage columns ----
+leak_cols <- c(
+  "Residential.TCSPF_mixed", "Residential.TCSPF_cold", "Residential.TCSPF_hot",
+  "Commercial.TCSPF_mixed",  "Commercial.TCSPF_cold",  "Commercial.TCSPF_hot",
+  "c_star_cold", "c_star_hot", "h_star_mixed", "h_star_cold", "h_star_hot",
+  "Residential.tcec_mixed", "Residential.tcec_cold", "Residential.tcec_hot",
+  "Commercial.tcec_mixed",  "Commercial.tcec_cold",  "Commercial.tcec_hot"
+)
+
+removed_manual <- intersect(names(df), leak_cols)
+if (length(removed_manual) > 0) {
+  df <- df[, !(names(df) %in% leak_cols)]
+  cat("\nRemoved", length(removed_manual), "manually defined leakage columns:\n")
+  print(removed_manual)
+} else {
+  cat("\nNo manually defined leakage columns found in dataset.\n")
+}
+
+# ---- 2.2 Correlation-based leakage detection ----
+num_df <- df[, sapply(df, is.numeric), drop = FALSE]
+target_numeric <- as.numeric(df$c_star_mixed)
+target_corr <- sapply(num_df, function(x) cor(x, target_numeric, use = "pairwise.complete.obs"))
+leak_features <- names(target_corr[abs(target_corr) > 0.8])
+
+invisible({
+  removed_manual <- intersect(names(df), leak_cols)
+  if (length(removed_manual) > 0) {
+    df <- df[, !(names(df) %in% leak_cols)]
+    cat("\nRemoved", length(removed_manual), "manually defined leakage columns:\n")
+    print(removed_manual)
+  } else {
+    cat("\nNo manually defined leakage columns found in dataset.\n")
+  }
+})
+
+# ---- 2.3 Brand-level leakage check ----
+if ("brand" %in% names(df)) {
+  brand_dist <- table(df$brand, df$c_star_mixed)
+  brand_ratio <- apply(brand_dist, 1, function(x) max(x) / sum(x))
+  leak_brands <- names(brand_ratio[brand_ratio > 0.9])
+  cat("\nPotential leakage brands (appearing >90% in one star level):\n")
+  print(leak_brands)
+  if (length(leak_brands) > 0) {
+    df <- df[!df$brand %in% leak_brands, ]
+    cat("Removed", length(leak_brands), "brands due to possible leakage.\n")
+  } else {
+    cat("No leakage-prone brands detected.\n")
+  }
+}
+
+# ================================================================
+#  Step 3: Split numeric and categorical features
+# ================================================================
+num_df <- df[, sapply(df, is.numeric), drop = FALSE]
+cat_df <- df[, sapply(df, function(x) is.character(x) | is.factor(x)), drop = FALSE]
+cat_df <- cat_df[, !(names(cat_df) %in% c("c_star_mixed")), drop = FALSE]
+
+# ================================================================
+#  Step 4: Remove columns with too many missing values (>40%)
+# ================================================================
+num_df <- num_df[, colMeans(!is.na(num_df)) > 0.4, drop = FALSE]
+cat_df <- cat_df[, colMeans(!is.na(cat_df)) > 0.4, drop = FALSE]
+
+```
+## Feature selection methods
+We adopted a mixed method feature selection strategy combining four techniques: **ANOVA** for numerical features, **Chi square test** for categorical features, **Mutual Information** to capture non linear associations across mixed types, and **Random Forest feature importance** for both types with embedded modelling. This combination allows us to use the speed and clarity of statistical filters while also uncovering complex patterns with model based methods. Research shows that hybrid techniques often outperform single methods in terms of stability and predictive power (Pudjihartono et al., 2022; Fernández de Romarategui et al., 2013).
+
+```{r}
+# ================================================================
+#  Step 5: ANOVA Feature Selection (Numeric)
+# ================================================================
+anova_results <- sapply(num_df, function(x) {
+  if (var(na.omit(x)) == 0) return(NA)
+  model <- aov(x ~ df$c_star_mixed)
+  pval <- summary(model)[[1]][["Pr(>F)"]][1]
+  return(pval)
+})
+
+anova_df <- data.frame(
+  Feature = names(anova_results),
+  Raw_pvalue = anova_results,
+  Score = -log10(anova_results),
+  Method = "ANOVA",
+  Type = "Numeric",
+  stringsAsFactors = FALSE
+) %>%
+  mutate(Significant = ifelse(Raw_pvalue < 0.01, "Yes", "No")) %>%
+  arrange(Raw_pvalue)
+
+# ================================================================
+#  Step 6: Categorical Feature Selection
+# ================================================================
+high_card_cols <- names(cat_df)[sapply(cat_df, function(x) length(unique(x)) > 20)]
+low_card_cols  <- setdiff(names(cat_df), high_card_cols)
+
+# ---- (a) Chi-square for low-cardinality ----
+chi_df <- data.frame()
+if (length(low_card_cols) > 0) {
+  chi_results <- sapply(cat_df[, low_card_cols, drop = FALSE], function(x) {
+    tbl <- table(x, df$c_star_mixed)
+    if (any(dim(tbl) < 2)) return(NA)
+    suppressWarnings(chisq.test(tbl)$p.value)
+  })
+  
+  chi_df <- data.frame(
+    Feature = names(chi_results),
+    Raw_pvalue = chi_results,
+    Score = -log10(chi_results),
+    Method = "Chi-square",
+    Type = "Categorical (Low-card)",
+    stringsAsFactors = FALSE
+  ) %>%
+    mutate(Significant = ifelse(Raw_pvalue < 0.05, "Yes", "No")) %>%
+    arrange(Raw_pvalue)
+}
+
+# ---- (b) Mutual Information for high-cardinality ----
+mi_df <- data.frame()
+if (length(high_card_cols) > 0) {
+  mi_results <- sapply(cat_df[, high_card_cols, drop = FALSE], function(x) {
+    suppressMessages(
+      suppressWarnings(
+        capture.output({
+          mutinformation(discretize(x), discretize(df$c_star_mixed))
+        })
+      )
+    )
+  })
+  
+  mi_df <- data.frame(
+    Feature = names(mi_results),
+    Raw_pvalue = NA,
+    Score = round(as.numeric(mi_results), 5),
+    Method = "Mutual Information",
+    Type = "Categorical (High-card)",
+    stringsAsFactors = FALSE
+  ) %>%
+    mutate(Significant = ifelse(Score > 0.02, "Yes", "No")) %>%
+    arrange(desc(Score))
+}
+
+# ================================================================
+#  Step 7: Random Forest Feature Importance
+# ================================================================
+rf_model <- ranger(c_star_mixed ~ ., data = df %>% select(all_of(names(num_df)), c_star_mixed),
+                   importance = "impurity", num.trees = 300, seed = 42)
+
+rf_importance <- data.frame(
+  Feature = names(rf_model$variable.importance),
+  Score = rf_model$variable.importance,
+  Method = "Random Forest",
+  Type = "Numeric",
+  stringsAsFactors = FALSE
+) %>%
+  arrange(desc(Score))
+
+# ================================================================
+#  Step 8: Combine All Results
+# ================================================================
+feature_selection_results <- bind_rows(anova_df, chi_df, mi_df, rf_importance)
+
+feature_selection_results <- feature_selection_results %>%
+  group_by(Method) %>%
+  mutate(Normalized_Score = (Score - min(Score, na.rm = TRUE)) /
+                              (max(Score, na.rm = TRUE) - min(Score, na.rm = TRUE))) %>%
+  ungroup()
+
+combined_summary <- feature_selection_results %>%
+  group_by(Feature) %>%
+  dplyr::summarize(
+    Combined_Score = mean(Normalized_Score, na.rm = TRUE),
+    Methods_Used = paste(unique(Method), collapse = ", "),
+    Type = first(Type)
+  ) %>%
+  arrange(desc(Combined_Score))
+
+
+write.csv(combined_summary, "final_feature_selection_alltypes.csv", row.names = FALSE)
+```
+## Combination of 4 feature selection methods
+The outputs from the four feature selection methods (ANOVA, Chi-square, Mutual Information, and Random Forest) were combined into a single summary table. Each method’s scores were first normalised to a common 0–1 scale to account for differences in scoring ranges. The normalised scores for each feature were then averaged across methods to produce a combined score, ensuring that features consistently ranked important across multiple techniques were prioritised. This integrated approach provides a balanced and robust feature ranking for model development.
+
+## Number of selected features
+The number of features should be determined by model performance rather than a fixed rule. Prior studies show that the optimal subset size depends on the dataset and algorithm, so evaluation should rely on predictive criteria such as cumulative importance or cross-validation (Hall et al., 2009; Guyon & Elisseeff, 2003). In this study, features were retained until their cumulative importance reached 90 %, balancing dimensionality reduction with predictive accuracy.
+```{r}
+# ================================================================
+#  Step 10: Determine Optimal Number of Top Features
+# ================================================================
+combined_summary <- combined_summary %>%
+  arrange(desc(Combined_Score)) %>%
+  filter(!is.na(Combined_Score) & Combined_Score > 0) %>%
+  mutate(Cumulative = cumsum(Combined_Score) / sum(Combined_Score))
+
+if (nrow(combined_summary) > 0) {
+  # Find where cumulative importance reaches 90%
+  optimal_n <- which(combined_summary$Cumulative >= 0.9)[1]
+  cat("\nOptimal number of features (covering ≥90% total importance):", optimal_n, "\n")
+
+  # Plot cumulative importance curve
+  ggplot(head(combined_summary, 40),
+         aes(x = seq_along(Feature), y = Cumulative)) +
+    geom_line(color = "steelblue", linewidth = 1) +
+    geom_point(color = "darkblue") +
+    geom_hline(yintercept = 0.9, linetype = "dashed", color = "red") +
+    labs(
+      title = "Cumulative Feature Importance",
+      subtitle = "Dashed line = 90% cumulative importance threshold",
+      x = "Number of Top Features",
+      y = "Cumulative Importance"
+    ) +
+    theme_minimal(base_size = 13)
+} else {
+  cat("No valid features found for cumulative analysis.\n")
+}
+
+```
+
+## Final selected features
+```{r results='hide'}
+# ================================================================
+#  Step 11: Store and Display Selected Features (clean layout)
+# ================================================================
+if (exists("optimal_n") && !is.na(optimal_n)) {
+  selected_features <- head(combined_summary, optimal_n)
+  feature_list <- selected_features$Feature
+
+  # ---- store feature names for later use ----
+  saveRDS(feature_list, "selected_features_list.rds")  # reusable in next analysis
+  write.csv(selected_features, "selected_top_features.csv", row.names = FALSE)
+
+  # ---- now create a pretty 3-column display for presentation ----
+  n_cols <- 2
+  n_rows <- ceiling(length(feature_list) / n_cols)
+  feature_matrix <- matrix(
+    c(feature_list, rep("", n_cols * n_rows - length(feature_list))),
+    ncol = n_cols, byrow = TRUE
+  )
+
+  cat("**Selected Top", optimal_n, "Features:**\n\n")
+
+  # Convert matrix into markdown-style aligned text
+  invisible(apply(feature_matrix, 1, function(row) {
+    cat(paste(sprintf("%-35s", row), collapse = ""), "\n")
+  }))
+}
+```
+A total of 23 variables were finally selected based on the feature selection process described above, balancing predictive power and interpretability.
+
+## Modeling
+### Plan for Evaluation
+We use stratified k-fold repeated cross-validation with k = 3 and B = 2 repeats (3×2 = 6 resamples) to obtain a distribution of performance rather than a single estimate. All preprocessing—imputation, encoding, scaling/centering—and SMOTE for class imbalance are performed inside each resampling fold via recipes to prevent data leakage.
+The primary metric is Macro-F1 (robust to imbalance); Cohen’s Kappa and Accuracy are secondary. We report cross-validated means and standard deviations (mean ± SD) across the 6 resamples (k = 3, B = 2) and select the top model by the mean Macro-F1. After model selection, we evaluate on the held-out test set and report point estimates for Macro-F1, Kappa, and Accuracy.
+
+### Preprocessing and Leakage Control
+Fold-internal recipes are used:
+Nonlinear recipe: novel/unknown handling, rare-level pooling, one-hot encoding, median imputation, SMOTE, centering/scaling.
+kNN-PCA recipe: above + PCA (95% variance).
+Linear recipe: encoding without full one-hot, median imputation, SMOTE, high-correlation and linear-combination filters.
+Leakage-prone fields (e.g., c_star_mixed, ExpDate) are removed in advance.
+
+### Models and Hyper-parameters
+We compare LDA, k-NN (with PCA), SVM-linear, SVM-RBF, GLMnet (elastic net), Random Forest (ranger). Tuning is performed within CV:
+GLMnet: (α, λ)
+SVM-RBF: (C, σ); SVM-linear: cost
+Random Forest: mtry, splitrule ∈ {gini, extratrees}, min.node.size (trees fixed during CV)
+k-NN: k (with PCA).
+This yields a leakage-free, well-regularized comparison across linear to nonlinear regimes.
+
+### Model Comparison and Imputation Strategy
+The comparative experiment across mean/mode, median/mode, and hybrid imputations showed that Random Forest consistently achieved the best performance (Macro-F1 ≈ 0.95, Kappa ≈ 0.91). Differences between imputation methods were minimal—well within 0.003 in Macro-F1—indicating that model type had a stronger effect on performance than the choice of imputation method.
+Accordingly, the mainstream modeling pipeline continues to adopt median imputation as the default strategy, balancing robustness and simplicity.
+
+An imputation on/off comparison was also attempted but could not be completed, as disabling imputation caused class membership collapse in some folds and prevented model training. Therefore, all final models reported here include appropriate imputation steps to ensure stable cross-validation and reproducibility.
+
+### Class balance
+Whether to apply a stratified bootstrap depends on the prevalence of the minority class (the small-subpopulation problem; Wicklin, 2025). In general, when the expected counts for each class, n·p and n·(1 − p), are at least about 5–10, the standard (non-stratified) bootstrap is considered adequate (OpenIntro, LO 9).
+In our data, the minority class constitutes roughly 8–9 % of all observations (≥ 80 cases), which meets this rule of thumb. However, to enhance reporting consistency and improve the stability of interval estimates, we estimated 95 % confidence intervals for the test-set metrics using a bootstrap stratified by the true labels (B = 1000). This preserves the class proportions during resampling and ensures consistency with the stratified repeated cross-validation (MC-CV) procedure used during training.
+
+### Model Selection
+Selected Model: Random Forest (RF)
+(Reason)
+Nonlinear models (RF and RBF-SVM) rank at the top, suggesting the data contain nonlinear relationships and interactions. Among them, RF—robust to class imbalance and high dimensionality—achieved the most stable and highest Macro-F1 and Kappa under the current preprocessing (SMOTE + dummy encoding) and CV setup.
+Task: 3-class classification (low, mid, high)
+
+Performance Summary
+Macro-F1: 0.941 ± 0.009
+Kappa: 0.904 ± 0.011
+
+Test Set
+Macro-F1: 0.953
+Kappa: 0.928
+Accuracy: 0.960
+
+(Why RF is the Best Choice)
+High Accuracy and Stability: Consistent performance across CV and test sets, minimal variance.
+Robust to Class Imbalance: Excellent recall for minority class (high), reducing critical misclassification risk.
+Acceptable Error Pattern: Misclassifications occur mainly between adjacent classes; no severe errors.
+Operational Advantages: Fast inference, interpretable via feature importance, easy to deploy.
+```{r fig.width=12, fig.height=4, message=FALSE, warning=FALSE}
+library(dplyr); library(readr); library(recipes); library(caret);library(stringr);library(here);
+library(kernlab); library(glmnet); library(MASS); library(themis); library(ggplot2);library(pdp);library(vip);library(gridExtra)
+
+# Paths are relative to this notebook; run Part 1 first to create the intermediate CSVs.
+df <- read_csv("cleaned_data_after_EDA.csv", show_col_types = FALSE)
+
+top23 <- c(
+  "Brand",
+  "Rated AEER",
+  "EERtestAvg",
+  "C-Power_Inp_Rated",
+  "Residential HSPF_hot",
+  "Commercial HSPF_hot",
+  "PIA inoperative power",
+  "Commercial HSPF_mixed",
+  "Rated ACOP",
+  "Commercial HSPF_cold",
+  "COPtestAvg",
+  "Residential HSPF_cold",
+  "Residential HSPF_mixed",
+  "Rated Total Cool Capacity W",
+  "C-Total Cool Rated",
+  "T1_half_cap_power_rated",
+  "Commercial thec_hot",
+  "Residential thec_hot",
+  "H-Power_Inp_Rated",
+  "Low temp cooling half cap power rated",
+  "Residential thec_mixed",
+  "Commercial thec_mixed",
+  "H1_half_cap_power_rated"
+)
+
+df_top23 <- dplyr::select(df, tidyselect::any_of(top23))
+# names(df_top23)
+
+# 23column?
+stopifnot(ncol(df_top23) == 23)
+
+ 
+# with target
+if ("c_star_mixed" %in% names(df)) {
+  out <- dplyr::bind_cols(df["c_star_mixed"], df_top23)
+} else {
+  out <- df_top23
+}
+readr::write_csv(out, "selected_top23_data.csv")
+cat("✅ saved: selected_top23_data.csv (rows:", nrow(out), " / cols:", ncol(out), ")\n")
+```
+```{r results='hide'}
+# --- Continue with your target & split, using the cleaned data ---
+df <- readr::read_csv("selected_top23_data.csv",
+                      show_col_types = FALSE)  # << key step: continue from cleaned frame
+df <- read_csv("selected_top23_data.csv", show_col_types = FALSE)
+# Ensure c_star_mixed exists and is usable
+stopifnot("c_star_mixed" %in% names(df))
+
+# Optional: drop rows without target
+df <- df %>% filter(!is.na(c_star_mixed))
+# Target: 3 classes ("low","mid","high")
+df <- df %>%
+  mutate(
+    star3 = cut(
+      c_star_mixed,
+      breaks = c(-Inf, 2.5, 4.0, Inf),
+      labels = c("low","mid","high"),
+      right = TRUE, include.lowest = TRUE
+    ) |> factor(ordered = FALSE)
+  )
+# ensure valid factor level names
+stopifnot(all(levels(df$star3) == make.names(levels(df$star3))))
+
+set.seed(42)
+idx   <- caret::createDataPartition(df$star3, p = 0.80, list = FALSE)
+train <- droplevels(df[idx, ])
+test  <- droplevels(df[-idx, ])
+
+stopifnot(identical(levels(train$star3), levels(test$star3)))
+
+# --- 2) Metric: macro-F1 + Kappa (robust version) ---------------------------
+macro_f1_kappa <- function(data, lev = NULL, model = NULL) {
+  if (is.null(lev)) lev <- levels(factor(data$obs))
+
+  keep <- stats::complete.cases(data$obs, data$pred)
+  if (!any(keep)) {
+    return(c(Mean_F1 = NA_real_, Kappa = NA_real_, Accuracy = NA_real_))
+  }
+
+  obs  <- factor(data$obs[keep],  levels = lev)
+  pred <- factor(data$pred[keep], levels = lev)
+
+  pr <- sapply(lev, function(l) {
+    tp <- sum(obs == l & pred == l, na.rm = TRUE)
+    fp <- sum(obs != l & pred == l, na.rm = TRUE)
+    if ((tp + fp) == 0) 0 else tp / (tp + fp)
+  })
+
+  rc <- sapply(lev, function(l) {
+    tp <- sum(obs == l & pred == l, na.rm = TRUE)
+    fn <- sum(obs == l & pred != l, na.rm = TRUE)
+    if ((tp + fn) == 0) 0 else tp / (tp + fn)
+  })
+
+  f1s     <- ifelse((pr + rc) == 0, 0, 2 * pr * rc / (pr + rc))
+  mean_f1 <- mean(f1s, na.rm = TRUE)
+
+  kappa <- tryCatch(
+    as.numeric(caret::confusionMatrix(pred, obs)$overall["Kappa"]),
+    error = function(e) NA_real_
+  )
+  acc <- mean(obs == pred, na.rm = TRUE)
+
+  c(Mean_F1 = mean_f1, Kappa = kappa, Accuracy = acc)
+}
+
+
+# --- 3) Recipes ---------------------------------------------------------------
+base_rec <- recipe(star3 ~ ., data = train) %>%
+  step_rm(any_of(c("c_star_mixed","ExpDate"))) %>%
+  step_zv(all_predictors())
+
+rec_nonlinear <- base_rec %>%
+  step_novel(all_nominal_predictors(), new_level = "new") %>%
+  step_unknown(all_nominal_predictors(), new_level = "unknown") %>%
+  step_other(all_nominal_predictors(), threshold = 0.02, other = "other") %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
+  step_zv(all_predictors()) %>%  
+  step_impute_median(all_numeric_predictors()) %>%
+  step_smote(star3, over_ratio = 1.5, neighbors = 5) %>%   
+  step_center(all_numeric_predictors()) %>%
+  step_scale(all_numeric_predictors())
+
+rec_knn_pca <- base_rec %>%
+  step_novel(all_nominal_predictors(), new_level = "new") %>%
+  step_unknown(all_nominal_predictors(), new_level = "unknown") %>%
+  step_other(all_nominal_predictors(), threshold = 0.02, other = "other") %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
+  step_zv(all_predictors()) %>%
+  step_impute_median(all_numeric_predictors()) %>%
+  step_smote(star3, over_ratio = 1.5, neighbors = 5) %>%  
+  step_normalize(all_numeric_predictors()) %>%
+  step_pca(all_numeric_predictors(), threshold = 0.95)
+
+rec_linear <- base_rec %>%
+  step_novel(all_nominal_predictors(), new_level = "new") %>%
+  step_unknown(all_nominal_predictors(), new_level = "unknown") %>%
+  step_other(all_nominal_predictors(), threshold = 0.02, other = "other") %>%
+  step_dummy(all_nominal_predictors(), one_hot = FALSE) %>%
+  step_impute_median(all_numeric_predictors()) %>%
+  step_smote(star3, over_ratio = 1.5, neighbors = 5) %>% 
+  step_corr(all_numeric_predictors(), threshold = 0.95) %>%
+  step_lincomb(all_predictors())
+
+# --- 3a) Class imbalance check (overall / train / test) ----------------------
+# Overall (full dataset)
+tbl_all  <- table(df$star3);   prop_all <- prop.table(tbl_all)
+
+# Training split
+tbl_tr   <- table(train$star3); prop_tr <- prop.table(tbl_tr)
+
+# Test split
+tbl_te   <- table(test$star3);  prop_te <- prop.table(tbl_te)
+
+# Simple imbalance metric: ratio of the largest to the smallest class
+imb_all <- as.numeric(max(tbl_all) / min(tbl_all))
+imb_tr  <- as.numeric(max(tbl_tr)  / min(tbl_tr))
+imb_te  <- as.numeric(max(tbl_te)  / min(tbl_te))
+
+invisible(list(
+  overall_counts = tbl_all,
+  overall_props  = round(prop_all, 3),
+  train_counts   = tbl_tr,
+  train_props    = round(prop_tr, 3),
+  test_counts    = tbl_te,
+  test_props     = round(prop_te, 3),
+  imbalance_ratio = c(
+    overall = round(imb_all, 2),
+    train   = round(imb_tr,  2),
+    test    = round(imb_te,  2)
+  )
+))
+
+# --- 3b) Quick bar plot ------------------------------------------------------
+library(ggplot2)
+p_tr <- ggplot(as.data.frame(tbl_tr), aes(x = Var1, y = Freq)) +
+  geom_col() + labs(title="Train class distribution", x="Class", y="Count")
+p_te <- ggplot(as.data.frame(tbl_te), aes(x = Var1, y = Freq)) +
+  geom_col() + labs(title="Test class distribution", x="Class", y="Count")
+# print(p_tr); print(p_te)
+
+# --- 4) Cross-validation control ---------------------------------------------
+B <- 2
+set.seed(42)
+idx <- caret::createMultiFolds(train$star3, k = 3, times = B)
+
+ctrl <- caret::trainControl(
+  method = "repeatedcv",
+  index  = idx,                 
+  classProbs = TRUE,            
+  summaryFunction = macro_f1_kappa,
+  savePredictions = "final",
+  verboseIter = FALSE
+)
+
+# --- 5) Tuning grids ----------------------------------------------------------
+grid_svm_rbf <- expand.grid(
+  sigma = exp(seq(log(0.01), log(0.20), length = 5)),
+  C     = 2^(0:4)
+)
+grid_svm_lin <- data.frame(cost = c(0.25, 0.5, 1, 2, 4, 8, 16, 32))
+grid_glmnet  <- expand.grid(alpha = seq(0, 1, by = 0.25),
+                            lambda = 10^seq(-3, 1, length = 15))
+grid_kknn    <- expand.grid(kmax = seq(3, 41, 2), distance = 2, kernel = "triangular")
+grid_rf      <- expand.grid(mtry = c(2,4,6,8), splitrule = c("gini","extratrees"),
+                            min.node.size = c(1,3,5))
+
+# --- 6) Model training (metric = Mean_F1) ------------------------------------
+set.seed(42)
+fit_rf <- train(rec_nonlinear, data = train, method = "ranger",
+                trControl = ctrl, metric = "Mean_F1",
+                tuneGrid = grid_rf, importance = "permutation", num.trees = 100)   
+set.seed(42)
+fit_svm_rbf <- train(rec_nonlinear, data = train, method = "svmRadial",
+                     trControl = ctrl, metric = "Mean_F1",
+                     tuneGrid  = grid_svm_rbf)
+
+```
+```{r fig.width=12, fig.height=4, message=FALSE, warning=FALSE}
+set.seed(42)
+w <- list(low=1, mid=1.2, high=2.5)
+fit_svm_lin <- train(rec_linear, data=train, method="svmLinear3",
+                     trControl=ctrl, metric="Mean_F1")  
+
+set.seed(42)
+fit_glmnet <- train(rec_linear, data = train, method = "glmnet",
+                    trControl = ctrl, metric = "Mean_F1",
+                    tuneGrid  = grid_glmnet)
+
+set.seed(42)
+fit_lda <- train(rec_linear, data = train, method = "lda",
+                 trControl = ctrl, metric = "Mean_F1")
+
+set.seed(42)
+fit_kknn <- train(rec_knn_pca, data = train, method = "kknn",
+                  trControl = ctrl, metric = "Mean_F1",
+                  tuneGrid  = grid_kknn)
+
+# --- 7a) CV comparison across models -----------------------------------------
+resamps <- resamples(list(
+  SVMrbf = fit_svm_rbf, SVMlin = fit_svm_lin,
+  GLMnet = fit_glmnet,  LDA    = fit_lda,
+  kNN    = fit_kknn,    RF     = fit_rf
+))
+p1 <- dotplot(resamps, metric = "Mean_F1", main = "Macro-F1 (CV)")
+p2 <- dotplot(resamps, metric = "Kappa",   main = "Kappa (CV)")
+print(p1, split = c(1,1,2,1), more = TRUE)
+print(p2, split = c(2,1,2,1), more = FALSE)
+
+# --- CV summary table (mean ± sd) -------------------------------------------
+cv_sum <- summary(resamps)$statistics
+
+# Pull the means from the 'statistics' slot (column name is "Mean")
+mean_f1 <- cv_sum$Mean_F1[, "Mean", drop = TRUE]
+mean_k  <- cv_sum$Kappa[,   "Mean", drop = TRUE]
+
+# Compute SDs from resamples$values
+vals <- resamps$values  # data frame with each resample's metric values
+
+long <- vals %>%
+  tidyr::pivot_longer(-Resample, names_to = "ModelMetric", values_to = "Value") %>%
+  tidyr::separate(ModelMetric, into = c("Model", "Metric"), sep = "~")
+
+sd_f1 <- long %>%
+  dplyr::filter(Metric == "Mean_F1") %>%
+  dplyr::group_by(Model) %>%
+  dplyr::summarise(SD = sd(Value, na.rm = TRUE), .groups = "drop")
+
+sd_k <- long %>%
+  dplyr::filter(Metric == "Kappa") %>%
+  dplyr::group_by(Model) %>%
+  dplyr::summarise(SD = sd(Value, na.rm = TRUE), .groups = "drop")
+
+# Keep row order consistent with 'statistics' (row names == model names)
+models <- rownames(cv_sum$Mean_F1)
+
+tbl_cv <- tibble::tibble(
+  Model   = models,
+  MacroF1 = sprintf("%.3f ± %.3f",
+                    mean_f1[models],
+                    sd_f1$SD[match(models, sd_f1$Model)]),
+  Kappa   = sprintf("%.3f ± %.3f",
+                    mean_k[models],
+                    sd_k$SD[match(models, sd_k$Model)])
+)
+
+# --- Majority-class baseline (using CV context) ------------------------------
+maj_class <- names(sort(table(train$star3), decreasing = TRUE))[1]
+baseline <- tibble::tibble(
+  Model   = "Baseline (Majority)",
+  MacroF1 = sprintf("%.3f ± %.3f", 0, 0),  # majority guess yields 0 macro-F1
+  Kappa   = sprintf("%.3f ± %.3f", 0, 0)   # and 0 Cohen's Kappa
+)
+
+tbl_cv <- dplyr::bind_rows(tbl_cv, baseline)
+
+# --- CV summary table (mean ± sd) -------------------------------------------
+
+cv_sum <- summary(resamps)$statistics
+
+# Means come from the 'statistics' slot
+models  <- rownames(cv_sum$Mean_F1)
+mean_f1 <- cv_sum$Mean_F1[, "Mean", drop = TRUE]
+mean_k  <- cv_sum$Kappa[,   "Mean", drop = TRUE]
+
+# Compute SDs from per-resample values in resamples$values
+vals <- resamps$values  # data frame of metrics for each resample/fold
+
+long <- vals %>%
+  tidyr::pivot_longer(-Resample, names_to = "ModelMetric", values_to = "Value") %>%
+  tidyr::separate(ModelMetric, into = c("Model", "Metric"), sep = "~")
+
+sd_f1 <- long %>%
+  dplyr::filter(Metric == "Mean_F1") %>%
+  dplyr::group_by(Model) %>%
+  dplyr::summarise(SD = sd(Value, na.rm = TRUE), .groups = "drop")
+
+sd_k <- long %>%
+  dplyr::filter(Metric == "Kappa") %>%
+  dplyr::group_by(Model) %>%
+  dplyr::summarise(SD = sd(Value, na.rm = TRUE), .groups = "drop")
+
+# Build the table (keep model order consistent with 'statistics')
+tbl_cv <- tibble::tibble(
+  Model   = models,
+  MacroF1 = sprintf("%.3f ± %.3f",
+                    mean_f1[models],
+                    sd_f1$SD[match(models, sd_f1$Model)]),
+  Kappa   = sprintf("%.3f ± %.3f",
+                    mean_k[models],
+                    sd_k$SD[match(models, sd_k$Model)])
+)
+
+# --- Majority-class baseline (on CV predictions) -----------------------------
+maj_class <- names(sort(table(train$star3), decreasing = TRUE))[1]
+baseline <- tibble::tibble(
+  Model   = "Baseline (Majority)",
+  MacroF1 = sprintf("%.3f ± %.3f", 0, 0),
+  Kappa   = sprintf("%.3f ± %.3f", 0, 0)
+)
+tbl_cv <- dplyr::bind_rows(tbl_cv, baseline)
+
+# Inspect
+# print(tbl_cv)
+
+library(tidyr)
+# --- Gather per-resample metrics and summarise by model ----------------------
+vals <- resamps$values
+
+long <- vals %>%
+  pivot_longer(-Resample, names_to = "ModelMetric", values_to = "Value") %>%
+  separate(ModelMetric, into = c("Model", "Metric"), sep = "~")
+
+# Compute mean and SD of Mean_F1 for each model across resamples
+sum_f1 <- long %>%
+  filter(Metric == "Mean_F1") %>%
+  group_by(Model) %>%
+  summarise(
+    Mean = mean(Value, na.rm = TRUE),
+    SD   = sd(Value,   na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# --- Pick the best model name by highest Mean_F1 -----------------------------
+
+sum_f1 <- sum_f1 %>% 
+  dplyr::filter(is.finite(Mean)) %>% 
+  dplyr::mutate(Model = as.character(Model))
+
+if (nrow(sum_f1) == 0) stop("sum_f1 is empty: check Metric names in `long`")
+
+best_idx <- which.max(sum_f1$Mean)           
+best_model_name <- sum_f1$Model[best_idx]    
+
+
+model_list <- list(
+  SVMrbf = fit_svm_rbf,
+  SVMlin = fit_svm_lin,
+  GLMnet = fit_glmnet,
+  LDA    = fit_lda,
+  kNN    = fit_kknn,
+  RF     = fit_rf
+)
+best_fit <- model_list[[best_model_name]]
+
+# --- Test-set predictions and metrics ----------------------------------------
+pred_te <- predict(best_fit, newdata = test)
+lev     <- levels(test$star3)
+
+# Macro-F1, Kappa, and Accuracy utility (macro-F1 = unweighted mean over classes)
+macro_f1_kappa <- function(data, lev = NULL) {
+  if (is.null(lev)) lev <- levels(data$obs)
+
+  obs  <- factor(data$obs,  levels = lev)
+  pred <- factor(data$pred, levels = lev)
+
+  # Per-class precision and recall
+  pr <- sapply(lev, function(l) {
+    tp <- sum(obs == l & pred == l)
+    fp <- sum(obs != l & pred == l)
+    if ((tp + fp) == 0) 0 else tp / (tp + fp)
+  })
+
+  rc <- sapply(lev, function(l) {
+    tp <- sum(obs == l & pred == l)
+    fn <- sum(obs == l & pred != l)
+    if ((tp + fn) == 0) 0 else tp / (tp + fn)
+  })
+
+  # Macro-F1 (mean of per-class F1)
+  f1 <- mean(ifelse(pr + rc == 0, 0, 2 * pr * rc / (pr + rc)))
+
+  # Cohen's Kappa and overall Accuracy
+  kappa <- caret::confusionMatrix(pred, obs)$overall["Kappa"]
+  acc   <- mean(obs == pred)
+
+  c(
+    Mean_F1 = as.numeric(f1),
+    Kappa   = as.numeric(kappa),
+    Accuracy = as.numeric(acc)
+  )
+}
+
+metrics_te <- macro_f1_kappa(
+  data.frame(obs = test$star3, pred = pred_te),
+  lev = lev
+)
+invisible(metrics_te)
+
+ 
+# Stratified bootstrap by true labels to get 95% CIs for test metrics
+set.seed(5003)
+B <- 1000
+y  <- droplevels(test$star3)
+yh <- factor(pred_te, levels = levels(y))
+
+
+idx_by_class <- split(seq_along(y), y)
+
+
+boot_mat <- matrix(NA_real_, nrow = B, ncol = 3,
+                   dimnames = list(NULL, c("Mean_F1","Kappa","Accuracy")))
+
+for (b in 1:B) {
+  samp_idx <- unlist(lapply(idx_by_class, function(ix) sample(ix, length(ix), replace = TRUE)),
+                     use.names = FALSE)
+  boot_mat[b, ] <- macro_f1_kappa(
+    data.frame(obs = y[samp_idx], pred = yh[samp_idx]),
+    lev = levels(y)
+  )
+}
+
+# CI（95%）
+point <- macro_f1_kappa(data.frame(obs = y, pred = yh), lev = levels(y))
+ci    <- apply(boot_mat, 2, function(v) quantile(v, c(0.025, 0.975), na.rm = TRUE))
+
+
+boot_table <- data.frame(
+  Metric = c("Macro-F1","Kappa","Accuracy"),
+  Point  = round(unname(point), 3),
+  CI95   = paste0("[", round(ci[1,], 3), ", ", round(ci[2,], 3), "]"),
+  row.names = NULL
+)
+invisible(boot_table)
+
+# --- Confusion matrix and per-class metrics ----------------------------------
+cm <- caret::confusionMatrix(pred_te, test$star3)
+invisible(cm$table)                 # confusion matrix
+invisible(as.data.frame(cm$byClass)) # per-class Precision / Recall / F1 (and more)
+
+```
+
+
+## Feature Importance Overview (B = 2, k = 3 model)
+In the final Random Forest model (B = 2, k = 3), stable feature rankings were obtained through repeated cross-validation.
+Permutation-based importance (MDA) and Gini-based importance (MDI) were compared to identify both robust and potentially biased predictors.
+
+Under Permutation Importance (MDA), PIA inoperative power, Low-temp cooling half-capacity power rated, and Rated AEER consistently emerged as the top predictors.
+These variables jointly capture both core energy efficiency (AEER) and auxiliary energy consumption components, which directly relate to the star-rating mechanism.
+By contrast, the Gini-based importance (MDI) slightly overemphasized features correlated with cooling or heating loads—particularly Low-temp power and Residential HSPF_hot—due to the impurity reduction bias inherent in tree-based measures.
+
+Given that MDA directly measures the change in model error (ΔError) when each feature is permuted, it was prioritized in subsequent analyses as a more reliable indicator of predictive causality rather than structural correlation.
+Accordingly, the Partial Dependence (PDP) and Individual Conditional Expectation (ICE) analyses focused on the three most influential MDA-ranked variables (Rated AEER, Low-temp power, and PIA inoperative power),to explore their marginal and interaction effects in greater detail.
+```{r fig.width=7, fig.height=3}
+# 1) Permutation importance (MDA) from your final RF
+to_imp <- function(fit, label){
+  vi <- caret::varImp(fit, scale = FALSE)$importance
+  col <- if ("Overall" %in% names(vi)) "Overall" else names(vi)[1]
+  tibble(feature = rownames(vi),
+         importance = as.numeric(vi[[col]]),
+         method = label) |>
+    arrange(desc(importance))
+}
+imp_perm <- to_imp(fit_rf, "Permutation (MDA)")
+
+# 2) Train same-RF for Gini (MDI) using bestTune
+best <- as.data.frame(fit_rf$bestTune)   # mtry / splitrule / min.node.size
+set.seed(42)
+fit_rf_gini <- caret::train(
+  rec_nonlinear, data = train, method = "ranger",
+  trControl = ctrl, metric = "Mean_F1",
+  tuneGrid  = best,
+  importance = "impurity",
+  num.trees = 200
+)
+imp_gini <- to_imp(fit_rf_gini, "Gini (MDI)")
+
+# 3) Side-by-side plots (top 20)
+plt_imp <- function(df, title, ylab){
+  ggplot(head(df, 20),
+         aes(x = reorder(feature, importance), y = importance)) +
+    geom_col() + coord_flip() +
+    labs(title = title, x = "Feature", y = ylab) +
+    theme_minimal(base_size = 12)
+}
+p_mda <- plt_imp(imp_perm, "Permutation Importance (MDA) — Top 20", "ΔError")
+p_mdi <- plt_imp(imp_gini, "Gini (Impurity) Importance (MDI) — Top 20", "ΔGini")
+gridExtra::grid.arrange(p_mda, p_mdi, ncol = 2)
+```
+
+## Section 6.3 Feature Interpretation
+### Primary Driver: Rated AEER (Rated Annual Energy Efficiency Ratio)
+In the univariate PDP (Figure “PDP + ICE: Rated AEER”), the probability of a high star rating, P(high), sharply increased once the Rated AEER exceeded approximately 4.0.
+This threshold roughly corresponds to the boundary between the 4★ and 5★ categories under the GEMS regulatory framework, indicating that the model successfully captured the real-world evaluation logic embedded in the star rating system.
+Accordingly, Rated AEER can be identified as the principal driver variable that most strongly determines star ratings.  
+
+### Complementary Factor 1: Low-temperature Cooling Half-capacity Power Rated
+In the univariate PDP (including ICE), the curve was nearly flat, showing no clear increasing or decreasing trend.
+Therefore, a second-order interaction analysis with AEER was conducted, revealing a distinct relationship.
+Specifically, when AEER was high (≥4), lower low-temperature cooling power consumption corresponded to higher P(high),
+whereas for lower AEER values (≤3.8), the effect was negligible. This suggests that Low-temp power acts as a reinforcing factor only among high-efficiency units, enhancing performance within already efficient configurations. Therefore, a second-order interaction analysis (Figure “2D PDP: AEER × Low Temp”) with AEER was conducted.
+
+### Complementary Factor 2: PIA Inoperative Power (Standby Power Consumption)
+Similarly, PIA inoperative power alone showed no significant effect in the univariate PDP.
+However, the two-dimensional interaction analysis (Figure “2D PDP: AEER × PIA Power”) revealed a clear pattern:
+1. When AEER was high (≥4.5) and PIA power was low, P(high) increased. 2.When AEER was low, reducing PIA power had only limited impact.
+Hence, the model learned a structure in which products that combine high efficiency with low standby power achieve the highest probability of receiving a high star rating.
+
+### Variable Distribution and Non-linearity
+Both PIA power and Low-temp power exhibited strong right-skewed distributions, with the majority of samples concentrated in the low-power region.
+Consequently, the univariate PDPs appeared almost flat due to averaging effects; however, after applying logarithmic transformation and 2D interaction analysis, the non-linear and sparse interaction patterns became apparent.
+This indicates that the random forest model effectively captured the non-linear interdependencies underlying efficiency performance.
+
+### Overall Interpretation
+
+Collectively, these results demonstrate that the model has learned the following underlying structure:
+
+“Higher AEER (greater efficiency), combined with lower auxiliary and standby power consumption, yields higher star ratings.”
+
+Rated AEER serves as the core determinant, while Low-temp power and PIA power function as complementary factors that strengthen performance within the high-efficiency domain.
+This structure is consistent with both the physical principles of efficiency design and the logic of real-world energy labeling systems,
+thereby supporting the validity and explanatory robustness of the trained model.
+
+## Limitations and Future Directions
+
+(1) Residual leakage risk.
+Although direct formula-based variables (e.g., TCSPF, tcec, other-zone star metrics) were excluded, some derived or renamed features may still encode correlations indirectly tied to the target.
+Mitigation: Column standardisation and manual audit were applied; in future iterations, any features exhibiting disproportionately high importance relative to AEER-based metrics should be re-examined or excluded.
+
+(2) Target discretisation sensitivity.
+The conversion of the continuous star rating (c_star_mixed) into three discrete bands (low, mid, high) may introduce boundary effects, where marginal numeric differences alter class assignments.
+Mitigation: Report adjacent-class confusion separately, and explore ordinal classification or continuous regression formulations in future work.
+
+(3) Scope limitation in interpretability.
+Since PDP and ICE analyses were guided primarily by Permutation Importance (MDA) ranking, some lower-ranked but contextually relevant variables (e.g., seasonal coefficients) were not explored in depth.
+Future work could extend the interpretability scope by applying SHAP or ALE analysis to validate MDA-based prioritisation.
+```{r}
+library(stringr)
+library(purrr)
+target_class <- "high"
+
+plot_pdp_ice <- function(model, train_df, feature, class = target_class,
+                         grid.res = 50, center_ice = TRUE,
+                         col_ice = "#9ec3ff",    # 薄い青
+                         col_pdp = "#1f4dbf") {  # 濃い青
+  pd <- pdp::partial(
+    model, pred.var = feature, train = train_df,
+    prob = TRUE, which.class = class,
+    ice = TRUE, center = center_ice,
+    grid.resolution = grid.res
+  )
+
+  xcol <- feature
+  ggplot(pd, aes(x = .data[[xcol]], y = yhat)) +
+    geom_line(aes(group = yhat.id),
+              color = col_ice, alpha = 0.25) +             # ICE（薄い青）
+    stat_summary(geom = "line", fun = mean,
+                 color = col_pdp, linewidth = 1.2) +       # PDP（濃い青）
+    labs(
+      title = sprintf("PDP + ICE: P(%s) vs %s", class, feature),
+      x = feature, y = sprintf("Predicted P(%s)", class)
+    ) +
+    theme_minimal(base_size = 12)
+}
+
+feat_list <- c("PIA inoperative power",
+               "Low temp cooling half cap power rated",
+               "Rated AEER")
+
+plots <- purrr::map(feat_list, ~ plot_pdp_ice(fit_rf, train, .x))
+plots[[1]]; plots[[2]]; plots[[3]]
+```
+
+```{r fig.width=8, fig.height=3, message=FALSE, warning=FALSE}
+
+# --- Base histograms ---
+par(mfrow = c(1, 2))
+# hist(train[["Low temp cooling half cap power rated"]], 50, main="low-temp power")
+# hist(train[["PIA inoperative power"]], 50, main="PIA power")
+par(mfrow = c(1, 1))
+
+
+# --- PDP 1: AEER × Low-temp half-cap ---
+pd2 <- pdp::partial(
+  fit_rf,
+  pred.var = c("Rated AEER", "Low temp cooling half cap power rated"),
+  train = train, prob = TRUE, which.class = "high",
+  chull = TRUE, grid.resolution = 30
+)
+
+ggplot(pd2, aes(x = `Rated AEER`,
+                y = `Low temp cooling half cap power rated`,
+                fill = yhat)) +
+  geom_raster(interpolate = TRUE) +
+  geom_contour(aes(z = yhat), color = "white", alpha = 0.6, bins = 8) +
+  scale_x_continuous() +
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_si(" "))) +
+  labs(title = "2D PDP: P(high)",
+       x = "Rated AEER", y = "Low-temp half-cap power", fill = "P(high)") +
+  theme_minimal(base_size = 12)
+
+# --- PDP 2: AEER × PIA power ---
+pd_pia <- pdp::partial(
+  fit_rf,
+  pred.var = c("Rated AEER", "PIA inoperative power"),
+  train = train, prob = TRUE, which.class = "high",
+  chull = TRUE, grid.resolution = 30
+)
+
+ggplot(pd_pia, aes(`Rated AEER`, `PIA inoperative power`, fill = yhat)) +
+  geom_raster(interpolate = TRUE) +
+  geom_contour(aes(z = yhat), color = "white", alpha = 0.6, bins = 8) +
+  scale_x_continuous() +
+  scale_y_continuous(labels = scales::label_number(scale_cut = scales::cut_si(" "))) +
+  labs(title = "2D PDP: P(high) — AEER × PIA power",
+       x = "Rated AEER", y = "PIA inoperative power (W)", fill = "P(high)") +
+  theme_minimal(base_size = 12)
+```
+
+## Conclusion
+The results of this analysis demonstrate that the predictive model has successfully captured the structural logic underlying the Australian energy-efficiency rating framework. Specifically, higher Rated AEER values, combined with lower auxiliary and standby power consumption, were found to correspond consistently with higher star ratings. These variables form a coherent interaction pattern in which Rated AEER serves as the primary determinant of efficiency, while low-temperature cooling half-capacity power and PIA inoperative power function as complementary features that reinforce high-efficiency performance.
+
+The Random Forest model achieved strong predictive performance (Macro-F1 ≈ 0.95), confirming that energy efficiency can be reliably predicted using a limited number of key physical and performance variables. This supports the principle of model-guided minimal testing, whereby costly and time-intensive laboratory experiments can be partially replaced by data-driven prediction without compromising accuracy. The interpretability of the model also aligns with the physical principles of appliance design and the GEMS energy-efficiency labeling system, further validating its practical applicability.
+
+Overall, this study demonstrates the feasibility of using machine learning to accelerate appliance testing and certification, reduce evaluation costs, and inform both policy development and innovation in Australia’s residential air-conditioning sector.
+
+## Appendix
+### Appendix1: Data Sources and Regulatory References
+Residential TCSPF_mixed / cold / hot:Direct input to star rating calculation/GEMS Determination 2019, Part 4 §31(1), Schedule 5
+Commercial TCSPF_mixed / cold / hot:Same calculation basis as Residential TCSPF/same as above
+c_star_cold / c_star_hot:Same calculation method as target/GEMS Determination 2019, Part 4 §31(2), Schedule 5
+Residential tcec_mixed / cold / hot/Used in annual energy consumption and indirectly in rating/GEMS Determination 2019, Part 4 §30(1)-(3)
+Commercial tcec_mixed / cold / hot/same as above
+Supporting Standards:
+AS/NZS 3823.4.1:2014 (ISO 16358-1 MOD) – Defines seasonal performance factor (TCSPF) and test points (§6.1–6.7, Annex B).
+GEMS (Air Conditioners up to 65kW) Determination 2019 – Specifies star rating calculation (§31), seasonal energy consumption (§30), and test requirements (Schedule 2 §8).
+
+### Appendix2: Transparency
+The low/mid/high star bands are custom-defined for this analysis and do not correspond to regulatory thresholds.  
+Breaks: Low < 2.5, Mid 2.5–4.0, High ≥ 4.0.
+We defined High as ≥4.0 because the distribution of c_star_mixed shows a clear right tail beyond this point.  
+•⁠  ⁠The median is around 2.8, and most observations cluster between 2.0 and 3.5.  
+•⁠  ⁠Ratings ≥4.0 represent the upper tail (roughly top 15–20%), indicating significantly better performance than the majority.This threshold ensures that “High” truly reflects exceptional units rather than average performers.
+
+### References
+- Pudjihartono, N., Fadason, T., Kempa-Liehr, A. & O’Sullivan, J. (2022) ‘A review of feature selection methods for machine learning-based disease risk prediction’, Frontiers in Bioinformatics, 2, 927312.
+- Gili Fernández de Romarategui, D., et al. (2021) Hybrid filter-wrapper approaches for feature selection. Universitat Politècnica de Catalunya.
+- Hall, P., Jin, J. & Miller, H. (2009) Feature selection when there are many influential features. Available at: https://arxiv.org/abs/0911.4076
+- Guyon, I. & Elisseeff, A. (2003) ‘An introduction to variable and feature selection’, Journal of Machine Learning Research, 3, pp. 1157–1182.
+- Pudjihartono, N., Fadason, T., Kempa-Liehr, A.W. & O’Sullivan, J.M. (2022) ‘A review of feature selection methods for machine learning-based disease risk prediction’, Frontiers in Bioinformatics, 2, 927312.
+- Fernández de Romarategui, D.G., et al. (2021) Hybrid filter‐wrapper approaches for feature selection. Universitat Politècnica de Catalunya.
+- **Pre defined data from the official website**
+Residential TCSPF_mixed / cold / hot:Direct input to star rating calculation/GEMS Determination 2019, Part 4 §31(1), Schedule 5
+Commercial TCSPF_mixed / cold / hot:Same calculation basis as Residential TCSPF/same as above
+c_star_cold / c_star_hot:Same calculation method as target/GEMS Determination 2019, Part 4 §31(2), Schedule 5
+Residential tcec_mixed / cold / hot/Used in annual energy consumption and indirectly in rating/GEMS Determination 2019, Part 4 §30(1)-(3)
+Commercial tcec_mixed / cold / hot/same as above
+Supporting Standards:
+AS/NZS 3823.4.1:2014 (ISO 16358-1 MOD) – Defines seasonal performance factor (TCSPF) and test points (§6.1–6.7, Annex B).
+GEMS (Air Conditioners up to 65kW) Determination 2019 – Specifies star rating calculation (§31), seasonal energy consumption (§30), and test requirements (Schedule 2 §8).
+
+Wicklin, R. (2025, May 12). Stratified bootstrapping and when to use it. The DO Loop (SAS Blogs). Retrieved from https://blogs.sas.com/content/iml/2025/05/12/stratified-bootstrap.html
+Çetinkaya-Rundel, M., Diez, D., Barr, C., & OpenIntro. (n.d.). Learning objectives—Chapter 3: Distributions of random variables (LO 9). In OpenIntro Statistics (latest ed.). Retrieved from https://www.openintro.org/go/?id=os3_learning_objectives_03
+Çetinkaya-Rundel, M. (n.d.). Section on normal approximation to the binomial and rules of thumb (e.g., n p, n (1 – p) ≥ 5–10). Retrieved from https://stats.stackexchange.com/questions/207671/normal-approximation-to-the-binomial-distribution-why-np5
+
+- Australian Government Department of Climate Change, Energy, the Environment and Water. (2025, September 18). *Energy Rating Data for household appliances – Labelled Products* \[Data set]. Data.gov.au. [https://data.gov.au/data/dataset/energy-rating-for-household-appliances](https://data.gov.au/data/dataset/energy-rating-for-household-appliances)
+
+
+
+
+

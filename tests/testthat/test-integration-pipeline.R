@@ -1,0 +1,41 @@
+test_that("raw CSV to saved model to prediction works end to end", {
+  dir <- withr::local_tempdir()
+  settings <- validate_settings(test_settings(dir))
+  readr::write_csv(make_raw(300), settings$paths$raw_data, na = "")
+  model <- train_model(settings, params = list(mtry = 3, min_n = 3, splitrule = "gini"))
+  expect_true(file.exists(settings$paths$model))
+  loaded <- load_model(settings$paths$model)
+  checked <- validate_records(list(example_record()))
+  pred <- predict_star(loaded, checked$data)
+  expect_true(pred$star_band %in% loaded$metadata$classes)
+  report <- jsonlite::read_json(file.path(dir, "reports", "metrics_default.json"))
+  expect_equal(report$split_strategy, "group")
+  expect_equal(report$test$twin_overlap, 0)
+})
+
+test_that("the ablation runs every experiment and writes its report", {
+  dir <- withr::local_tempdir()
+  settings <- validate_settings(test_settings(dir, model = list(trees = 15)))
+  data <- build_dataset(write_raw_csv(make_raw(300), dir))
+  res <- run_ablation(settings, n_seeds = 2, params = list(mtry = 3, min_n = 3, splitrule = "gini"), data = data)
+  expect_equal(res$summary$experiment, c("leaky_all_columns", "original", "group_split", "group_split_corr_filter"))
+  expect_true(all(res$summary$twin_overlap[3:4] == 0))
+  expect_true("Rated AEER" %in% res$corr_filter_removes)
+  expect_true(file.exists(file.path(dir, "reports", "ablation.json")))
+})
+
+# Regression test against the real raw file: the port must reproduce the
+# original cleaned table (4,759 rows x 80 columns after the EDA filter).
+test_that("the cleaning port reproduces the original table on the real data", {
+  raw_path <- testthat::test_path("..", "..", "data", "raw", "ac_2025_09_14.csv")
+  skip_if_not(file.exists(raw_path), "real data not available")
+  raw <- read_raw(raw_path)
+  expect_equal(dim(raw), c(5364L, 167L))
+  cleaned <- clean_raw(raw)
+  expect_equal(dim(cleaned), c(5306L, 149L))
+  data <- suppressWarnings(eda_filter(cleaned))
+  expect_equal(dim(data), c(4759L, 80L))
+  frame <- model_frame(data)
+  expect_equal(as.vector(table(frame$star3)), c(2588L, 1758L, 413L))
+  expect_equal(length(unique(frame$spec_group)), 2659L)
+})
